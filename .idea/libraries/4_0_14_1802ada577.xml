@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="4.0.14+1802ada577">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/exodus-hud/.gradle/loom-cache/remapped_mods/remapped/net/fabricmc/fabric-api/fabric-item-group-api-v1-c2d2b86c-common/4.0.14+1802ada577/fabric-item-group-api-v1-c2d2b86c-common-4.0.14+1802ada577.jar!/" />
+      <root url="jar://$PROJECT_DIR$/exodus-hud/.gradle/loom-cache/remapped_mods/remapped/net/fabricmc/fabric-api/fabric-item-group-api-v1-c2d2b86c-common/4.0.14+1802ada577/fabric-item-group-api-v1-c2d2b86c-common-4.0.14+1802ada577-sources.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

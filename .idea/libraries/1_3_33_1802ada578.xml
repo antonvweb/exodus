@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="1.3.33+1802ada578">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/exodus-hud/.gradle/loom-cache/remapped_mods/remapped/net/fabricmc/fabric-api/fabric-screen-handler-api-v1-c2d2b86c-client/1.3.33+1802ada577/fabric-screen-handler-api-v1-c2d2b86c-client-1.3.33+1802ada577-sources.jar!/" />
+      <root url="jar://$PROJECT_DIR$/exodus-hud/.gradle/loom-cache/remapped_mods/remapped/net/fabricmc/fabric-api/fabric-screen-handler-api-v1-c2d2b86c-client/1.3.33+1802ada577/fabric-screen-handler-api-v1-c2d2b86c-client-1.3.33+1802ada577.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

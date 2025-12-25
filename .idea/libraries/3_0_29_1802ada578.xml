@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="3.0.29+1802ada578">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/exodus-hud/.gradle/loom-cache/remapped_mods/remapped/net/fabricmc/fabric-api/fabric-rendering-fluids-v1-c2d2b86c-common/3.0.29+1802ada577/fabric-rendering-fluids-v1-c2d2b86c-common-3.0.29+1802ada577.jar!/" />
+      <root url="jar://$PROJECT_DIR$/exodus-hud/.gradle/loom-cache/remapped_mods/remapped/net/fabricmc/fabric-api/fabric-rendering-fluids-v1-c2d2b86c-common/3.0.29+1802ada577/fabric-rendering-fluids-v1-c2d2b86c-common-3.0.29+1802ada577-sources.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

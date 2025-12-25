@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="2.3.6+1802ada577">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/exodus-hud/.gradle/loom-cache/remapped_mods/remapped/net/fabricmc/fabric-api/fabric-registry-sync-v0-c2d2b86c-client/2.3.6+1802ada577/fabric-registry-sync-v0-c2d2b86c-client-2.3.6+1802ada577-sources.jar!/" />
+      <root url="jar://$PROJECT_DIR$/exodus-hud/.gradle/loom-cache/remapped_mods/remapped/net/fabricmc/fabric-api/fabric-registry-sync-v0-c2d2b86c-client/2.3.6+1802ada577/fabric-registry-sync-v0-c2d2b86c-client-2.3.6+1802ada577.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
