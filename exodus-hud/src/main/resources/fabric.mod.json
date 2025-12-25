@@ -4,22 +4,15 @@
   "version": "${version}",
 
   "name": "Exodus HUD",
-  "description": "Custom futuristic HUD for Project Exodus modpack. Features redesigned crosshair, hotbar, and stats display.",
-  "authors": ["YourName"],
-  "contact": {},
-
-  "license": "MIT",
+  "description": "Custom futuristic HUD for Project Exodus",
 
   "environment": "client",
 
   "entrypoints": {
-    "client": [
-      "com.exodus.hud.ExodusHudClient"
-    ]
+    "client": ["com.exodus.hud.ExodusHudClient"]
   },
-  "mixins": [
-    "exodus-hud.client.mixins.json"
-  ],
+
+  "mixins": ["exodus-hud.client.mixins.json"],
 
   "depends": {
     "fabricloader": ">=0.18.0",

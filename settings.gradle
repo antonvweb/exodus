@@ -11,5 +11,5 @@ pluginManagement {
 rootProject.name = 'exodus-modpack'
 
 include 'exodus-core'
-include 'exodus-hud'
 include 'exodus-survival'
+include 'exodus-hud'
