@@ -13,9 +13,11 @@
   "environment": "*",
   "entrypoints": {
     "client": [
-      "com.exodus.health.ExodusHealthClient"
+      "com.exodus.health.client.ExodusHealthClient"
     ],
-    "main": ["com.exodus.health.ExodusHealth"]
+    "main": [
+      "com.exodus.health.ExodusHealth"
+    ]
   },
 
   "mixins": [

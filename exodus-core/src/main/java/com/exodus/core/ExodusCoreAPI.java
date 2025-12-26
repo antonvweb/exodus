@@ -1,66 +1,97 @@
 package com.exodus.core;
 
-import com.exodus.core.api.player.BodyPart;
-import com.exodus.core.api.player.ExodusPlayerData;
-import com.exodus.core.player.ExodusPlayerComponent;
-import com.exodus.core.player.ExodusPlayerManager;
+import com.exodus.core.api.player.PlayerHealthData;
+import com.exodus.core.api.player.StatusEffect;
+import com.exodus.core.player.PlayerHealthComponent;
+import com.exodus.core.player.PlayerHealthManager;
 import net.minecraft.world.entity.player.Player;
 
 /**
  * Главный API класс для Exodus Core
- * Другие моды используют этот класс для взаимодействия с системой статов
  */
 public class ExodusCoreAPI {
-    // ==================== ИГРОК ====================
+
+    // ==================== ЗДОРОВЬЕ ====================
 
     /**
-     * Получить компонент расширенных данных игрока
+     * Получить компонент здоровья игрока
      */
-    public static ExodusPlayerComponent getPlayerComponent(Player player) {
-        return ExodusPlayerManager.getComponent(player);
+    public static PlayerHealthComponent getHealthComponent(Player player) {
+        return PlayerHealthManager.getComponent(player);
     }
 
     /**
-     * Получить данные игрока
+     * Получить данные здоровья игрока
      */
-    public static ExodusPlayerData getPlayerData(Player player) {
-        return getPlayerComponent(player).getData();
-    }
-
-    // ==================== ЧАСТИ ТЕЛА ====================
-
-    /**
-     * Получить данные части тела
-     */
-    public static ExodusPlayerData.BodyPartData getBodyPart(Player player, BodyPart part) {
-        return getPlayerComponent(player).getBodyPart(part);
+    public static PlayerHealthData getHealthData(Player player) {
+        return getHealthComponent(player).getData();
     }
 
     /**
-     * Нанести урон части тела
+     * Получить текущее HP
      */
-    public static void damageBodyPart(Player player, BodyPart part, float damage) {
-        getPlayerComponent(player).damageBodyPart(part, damage);
+    public static float getCurrentHP(Player player) {
+        return getHealthData(player).getCurrentHP();
     }
 
     /**
-     * Вылечить часть тела
+     * Получить максимальное HP
      */
-    public static void healBodyPart(Player player, BodyPart part, float amount) {
-        getPlayerComponent(player).healBodyPart(part, amount);
+    public static float getMaxHP(Player player) {
+        return getHealthData(player).getMaxHP();
     }
 
     /**
-     * Получить суммарное HP всех частей тела
+     * Нанести урон
      */
-    public static float getTotalHP(Player player) {
-        return getPlayerData(player).getTotalHP();
+    public static void damage(Player player, float amount) {
+        getHealthComponent(player).damage(amount);
     }
 
     /**
-     * Получить суммарное максимальное HP
+     * Восстановить здоровье
      */
-    public static float getTotalMaxHP(Player player) {
-        return getPlayerData(player).getTotalMaxHP();
+    public static void heal(Player player, float amount) {
+        getHealthComponent(player).heal(amount);
+    }
+
+    /**
+     * Жив ли игрок
+     */
+    public static boolean isAlive(Player player) {
+        return getHealthData(player).isAlive();
+    }
+
+    // ==================== СТАТУСНЫЕ ЭФФЕКТЫ ====================
+
+    /**
+     * Добавить статусный эффект
+     * @param effect эффект
+     * @param duration длительность в секундах
+     * @param intensity интенсивность (0.0 - 1.0)
+     */
+    public static void addEffect(Player player, StatusEffect effect, int duration, float intensity) {
+        getHealthComponent(player).addEffect(effect, duration * 20, intensity);
+    }
+
+    /**
+     * Убрать статусный эффект
+     */
+    public static void removeEffect(Player player, StatusEffect effect) {
+        getHealthComponent(player).removeEffect(effect);
+    }
+
+    /**
+     * Проверить есть ли эффект
+     */
+    public static boolean hasEffect(Player player, StatusEffect effect) {
+        return getHealthData(player).hasEffect(effect);
+    }
+
+    /**
+     * Получить интенсивность эффекта
+     */
+    public static float getEffectIntensity(Player player, StatusEffect effect) {
+        return getHealthData(player).getEffectIntensity(effect);
     }
 }

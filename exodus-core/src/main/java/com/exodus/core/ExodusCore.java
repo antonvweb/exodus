@@ -1,6 +1,6 @@
 package com.exodus.core;
 
-import com.exodus.core.player.ExodusPlayerManager;
+import com.exodus.core.player.PlayerHealthManager;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,8 +13,8 @@ public class ExodusCore implements ModInitializer {
     public void onInitialize() {
         LOGGER.info("Exodus Core - Initialization");
 
-        ExodusPlayerManager.registerEvents();
+        PlayerHealthManager.registerEvents();
 
-        LOGGER.info("Exodus Core - API initialized successfully");
+        LOGGER.info("Exodus Core - Initialized successfully");
     }
 }

@@ -1,17 +1,17 @@
 tasks.register('runClient') {
-    dependsOn ':exodus-hud:runClient'
+    dependsOn ':exodus-health:runClient'
     group = 'exodus'
     description = 'Run Minecraft client with Exodus mods'
 }
 
 tasks.register('buildAll') {
-    dependsOn ':exodus-core:build'
+    dependsOn ':exodus-core:build', ':exodus-health:build'
     group = 'exodus'
     description = 'Build all Exodus modules'
 }
 
 tasks.register('cleanAll') {
-    dependsOn ':exodus-core:clean'
+    dependsOn ':exodus-core:clean', ':exodus-health:clean'
     group = 'exodus'
     description = 'Clean all build directories'
 }
@@ -20,7 +20,7 @@ tasks.register('cleanAll') {
 subprojects {
     plugins.withId('fabric-loom') {
         afterEvaluate {
-            if (project.name != 'exodus-hud') {
+            if (project.name != 'exodus-health') {
                 tasks.named('runClient') { enabled = false }
                 tasks.named('runServer') { enabled = false }
             }

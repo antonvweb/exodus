@@ -4,6 +4,8 @@
   "package": "com.exodus.health.mixin.client",
   "compatibilityLevel": "JAVA_17",
   "client": [
+    "CameraShakeMixin",
+    "ClientDamageEffectsMixin"
   ],
   "injectors": {
     "defaultRequire": 1

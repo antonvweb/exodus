@@ -4,6 +4,7 @@
   "package": "com.exodus.health.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
+    "PlayerDamageMixin"
   ],
   "injectors": {
     "defaultRequire": 1
