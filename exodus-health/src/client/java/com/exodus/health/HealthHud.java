@@ -1,17 +1,15 @@
-package com.exodus.health.client;
+package com.exodus.health;
 
 import com.exodus.core.ExodusCoreAPI;
 import com.exodus.core.api.player.PlayerHealthData;
 import com.exodus.core.api.player.StatusEffect;
-import com.exodus.health.client.effects.BloodOverlay;
-import com.exodus.health.client.effects.LowHealthEffects;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
 
 /**
- * Простой HUD здоровья (нарисованный, без спрайтов)
+ * Простой HUD здоровья (только полоска HP и эффекты)
  */
 public class HealthHud {
 
@@ -33,7 +31,7 @@ public class HealthHud {
     }
 
     /**
-     * Отрисовка HUD + визуальные эффекты
+     * Отрисовка HUD (БЕЗ виньетки и крови)
      */
     private static void render(GuiGraphics graphics, float tickDelta) {
         Minecraft mc = Minecraft.getInstance();
@@ -43,16 +41,7 @@ public class HealthHud {
             return;
         }
 
-        int screenWidth = mc.getWindow().getGuiScaledWidth();
-        int screenHeight = mc.getWindow().getGuiScaledHeight();
-
-        // 1. ВИНЬЕТКА ПРИ НИЗКОМ HP
-        LowHealthEffects.renderVignette(graphics, screenWidth, screenHeight, player);
-
-        // 2. КРОВАВЫЕ СЛЕДЫ
-        BloodOverlay.render(graphics, screenWidth, screenHeight);
-
-        // 3. HUD ЗДОРОВЬЯ
+        // Рисуем только HUD здоровья
         renderHealthBar(graphics, player, mc);
         renderStatusEffects(graphics, player, mc);
     }
@@ -71,10 +60,10 @@ public class HealthHud {
         graphics.fill(HUD_X, HUD_Y, HUD_X + HP_BAR_WIDTH, HUD_Y + HP_BAR_HEIGHT, 0x88000000);
 
         // Рамка (белая)
-        graphics.fill(HUD_X - 1, HUD_Y - 1, HUD_X + HP_BAR_WIDTH + 1, HUD_Y, 0xFFFFFFFF); // Верх
-        graphics.fill(HUD_X - 1, HUD_Y + HP_BAR_HEIGHT, HUD_X + HP_BAR_WIDTH + 1, HUD_Y + HP_BAR_HEIGHT + 1, 0xFFFFFFFF); // Низ
-        graphics.fill(HUD_X - 1, HUD_Y, HUD_X, HUD_Y + HP_BAR_HEIGHT, 0xFFFFFFFF); // Лево
-        graphics.fill(HUD_X + HP_BAR_WIDTH, HUD_Y, HUD_X + HP_BAR_WIDTH + 1, HUD_Y + HP_BAR_HEIGHT, 0xFFFFFFFF); // Право
+        graphics.fill(HUD_X - 1, HUD_Y - 1, HUD_X + HP_BAR_WIDTH + 1, HUD_Y, 0xFFFFFFFF);
+        graphics.fill(HUD_X - 1, HUD_Y + HP_BAR_HEIGHT, HUD_X + HP_BAR_WIDTH + 1, HUD_Y + HP_BAR_HEIGHT + 1, 0xFFFFFFFF);
+        graphics.fill(HUD_X - 1, HUD_Y, HUD_X, HUD_Y + HP_BAR_HEIGHT, 0xFFFFFFFF);
+        graphics.fill(HUD_X + HP_BAR_WIDTH, HUD_Y, HUD_X + HP_BAR_WIDTH + 1, HUD_Y + HP_BAR_HEIGHT, 0xFFFFFFFF);
 
         // Полоска HP (цвет зависит от процента)
         int hpBarWidth = (int) (HP_BAR_WIDTH * percentage);
@@ -97,14 +86,11 @@ public class HealthHud {
      */
     private static int getHealthColor(float percentage) {
         if (percentage > 0.6f) {
-            // Зелёный (100% - 60%)
-            return 0xFF00FF00;
+            return 0xFF00FF00; // Зелёный
         } else if (percentage > 0.3f) {
-            // Жёлтый (60% - 30%)
-            return 0xFFFFFF00;
+            return 0xFFFFFF00; // Жёлтый
         } else {
-            // Красный (30% - 0%)
-            return 0xFFFF0000;
+            return 0xFFFF0000; // Красный
         }
     }
 
@@ -131,14 +117,14 @@ public class HealthHud {
      */
     private static void renderEffectIcon(GuiGraphics graphics, StatusEffect effect, int x, int y, Minecraft mc) {
         // Фон иконки (цвет эффекта)
-        int color = effect.getColor() | 0xAA000000; // Добавляем прозрачность
+        int color = effect.getColor() | 0xAA000000;
         graphics.fill(x, y, x + EFFECT_ICON_SIZE, y + EFFECT_ICON_SIZE, color);
 
         // Рамка (белая)
-        graphics.fill(x - 1, y - 1, x + EFFECT_ICON_SIZE + 1, y, 0xFFFFFFFF); // Верх
-        graphics.fill(x - 1, y + EFFECT_ICON_SIZE, x + EFFECT_ICON_SIZE + 1, y + EFFECT_ICON_SIZE + 1, 0xFFFFFFFF); // Низ
-        graphics.fill(x - 1, y, x, y + EFFECT_ICON_SIZE, 0xFFFFFFFF); // Лево
-        graphics.fill(x + EFFECT_ICON_SIZE, y, x + EFFECT_ICON_SIZE + 1, y + EFFECT_ICON_SIZE, 0xFFFFFFFF); // Право
+        graphics.fill(x - 1, y - 1, x + EFFECT_ICON_SIZE + 1, y, 0xFFFFFFFF);
+        graphics.fill(x - 1, y + EFFECT_ICON_SIZE, x + EFFECT_ICON_SIZE + 1, y + EFFECT_ICON_SIZE + 1, 0xFFFFFFFF);
+        graphics.fill(x - 1, y, x, y + EFFECT_ICON_SIZE, 0xFFFFFFFF);
+        graphics.fill(x + EFFECT_ICON_SIZE, y, x + EFFECT_ICON_SIZE + 1, y + EFFECT_ICON_SIZE, 0xFFFFFFFF);
 
         // Первая буква эффекта
         String letter = effect.getDisplayName().substring(0, 1);

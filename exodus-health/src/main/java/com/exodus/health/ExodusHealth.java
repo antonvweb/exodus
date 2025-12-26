@@ -14,6 +14,9 @@ public class ExodusHealth implements ModInitializer {
     public void onInitialize() {
         LOGGER.info("Exodus Health - Initialization");
 
+        // ✅ В Fabric API 1.20.1 пакеты регистрируются автоматически
+        // Нет необходимости вызывать DamagePacket.register()
+
         // Регистрируем систему статусных эффектов
         StatusEffectManager.register();
 
