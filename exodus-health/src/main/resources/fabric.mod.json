@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "exodus-health",
+  "version": "${version}",
+
+  "name": "exodus-health",
+  "description": "",
+  "authors": [],
+  "contact": {},
+
+  "license": "All-Rights-Reserved",
+
+  "environment": "*",
+  "entrypoints": {
+    "client": [
+      "com.exodus.health.ExodusHealthClient"
+    ],
+    "main": ["com.exodus.health.ExodusHealth"]
+  },
+
+  "mixins": [
+    "exodus-health.mixins.json"
+    ,{
+      "config": "exodus-health.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}",
+    "exodus-core": "*"
+  }
+}

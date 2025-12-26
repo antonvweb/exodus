@@ -16,14 +16,6 @@ public class ExodusPlayerComponent {
     public ExodusPlayerComponent(Player player) {
         this.player = player;
         this.data = new ExodusPlayerData();
-        initialize();
-    }
-
-    private void initialize() {
-        // Устанавливаем имя персонажа
-        data.setCharacterName(player.getName().getString());
-
-        // Базовые значения уже установлены в ExodusPlayerData конструкторе
     }
 
     /**
@@ -69,8 +61,8 @@ public class ExodusPlayerComponent {
     /**
      * Сохранить в NBT
      */
-    public CompoundTag writeNbt(CompoundTag nbt) {
-        return data.writeNbt(nbt);
+    public void writeNbt(CompoundTag nbt) {
+        data.writeNbt(nbt);
     }
 
     /**

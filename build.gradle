@@ -1,25 +1,17 @@
-// build.gradle (корневой)
-
 tasks.register('runClient') {
     dependsOn ':exodus-hud:runClient'
     group = 'exodus'
     description = 'Run Minecraft client with Exodus mods'
 }
 
-tasks.register('runServer') {
-    dependsOn ':exodus-hud:runServer'
-    group = 'exodus'
-    description = 'Run Minecraft server with Exodus mods'
-}
-
 tasks.register('buildAll') {
-    dependsOn ':exodus-core:build', ':exodus-hud:build', ':exodus-survival:build'
+    dependsOn ':exodus-core:build'
     group = 'exodus'
     description = 'Build all Exodus modules'
 }
 
 tasks.register('cleanAll') {
-    dependsOn ':exodus-core:clean', ':exodus-hud:clean', ':exodus-survival:clean'
+    dependsOn ':exodus-core:clean'
     group = 'exodus'
     description = 'Clean all build directories'
 }

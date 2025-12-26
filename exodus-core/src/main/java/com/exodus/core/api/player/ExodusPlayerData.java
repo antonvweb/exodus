@@ -12,18 +12,9 @@ public class ExodusPlayerData {
 
     // ============ БАЗОВАЯ ИНФОРМАЦИЯ ============
     private String characterName;
-    private int level;
-    private int experience;
 
     // ============ ЧАСТИ ТЕЛА ============
     private Map<BodyPart, BodyPartData> bodyParts;
-
-    // ============ ФИЗИОЛОГИЯ ============
-    private float bloodLevel = 100f;              // Уровень крови (0-100%)
-    private float bodyTemperature = 36.6f;        // Температура тела (°C)
-    private long lastCriticalHPCheck = 0;         // Время последней проверки критического HP
-    private long starvationStartTime = 0;         // Когда начался голод=0
-    private long dehydrationStartTime = 0;        // Когда началась жажда=0
 
     /**
      * Данные одной части тела
@@ -32,13 +23,11 @@ public class ExodusPlayerData {
         public float currentHP;
         public float maxHP;
         public boolean isBroken;
-        public boolean isBleeding;
 
         public BodyPartData(float maxHP) {
             this.maxHP = maxHP;
             this.currentHP = maxHP;
             this.isBroken = false;
-            this.isBleeding = false;
         }
 
         /**
@@ -58,7 +47,6 @@ public class ExodusPlayerData {
             nbt.putFloat("currentHP", currentHP);
             nbt.putFloat("maxHP", maxHP);
             nbt.putBoolean("isBroken", isBroken);
-            nbt.putBoolean("isBleeding", isBleeding);
             return nbt;
         }
 
@@ -69,70 +57,17 @@ public class ExodusPlayerData {
             this.currentHP = nbt.getFloat("currentHP");
             this.maxHP = nbt.getFloat("maxHP");
             this.isBroken = nbt.getBoolean("isBroken");
-            this.isBleeding = nbt.getBoolean("isBleeding");
         }
     }
 
     public ExodusPlayerData() {
         this.characterName = "";
-        this.level = 1;
-        this.experience = 0;
         this.bodyParts = new EnumMap<>(BodyPart.class);
 
         // Инициализируем все части тела
         for (BodyPart part : BodyPart.values()) {
             bodyParts.put(part, new BodyPartData(part.getBaseMaxHP()));
         }
-    }
-
-    // ============ ГЕТТЕРЫ/СЕТТЕРЫ: ФИЗИОЛОГИЯ ============
-
-    public float getBloodLevel() {
-        return bloodLevel;
-    }
-
-    public void setBloodLevel(float level) {
-        this.bloodLevel = Math.max(0, Math.min(100, level));
-    }
-
-    public void loseBlood(float amount) {
-        this.bloodLevel = Math.max(0, bloodLevel - amount);
-    }
-
-    public void restoreBlood(float amount) {
-        this.bloodLevel = Math.min(100, bloodLevel + amount);
-    }
-
-    public float getBodyTemperature() {
-        return bodyTemperature;
-    }
-
-    public void setBodyTemperature(float temp) {
-        this.bodyTemperature = temp;
-    }
-
-    public long getLastCriticalHPCheck() {
-        return lastCriticalHPCheck;
-    }
-
-    public void setLastCriticalHPCheck(long time) {
-        this.lastCriticalHPCheck = time;
-    }
-
-    public long getStarvationStartTime() {
-        return starvationStartTime;
-    }
-
-    public void setStarvationStartTime(long time) {
-        this.starvationStartTime = time;
-    }
-
-    public long getDehydrationStartTime() {
-        return dehydrationStartTime;
-    }
-
-    public void setDehydrationStartTime(long time) {
-        this.dehydrationStartTime = time;
     }
 
     // ============ ГЕТТЕРЫ/СЕТТЕРЫ: БАЗОВАЯ ИНФОРМАЦИЯ ============
@@ -145,21 +80,6 @@ public class ExodusPlayerData {
         this.characterName = characterName;
     }
 
-    public int getLevel() {
-        return level;
-    }
-
-    public void setLevel(int level) {
-        this.level = level;
-    }
-
-    public int getExperience() {
-        return experience;
-    }
-
-    public void setExperience(int experience) {
-        this.experience = experience;
-    }
 
     // ============ ГЕТТЕРЫ/СЕТТЕРЫ: ЧАСТИ ТЕЛА ============
 
@@ -198,8 +118,6 @@ public class ExodusPlayerData {
     public CompoundTag writeNbt(CompoundTag nbt) {
         // Сохраняем базовую информацию
         nbt.putString("characterName", characterName);
-        nbt.putInt("level", level);
-        nbt.putInt("experience", experience);
 
         // Сохраняем части тела
         CompoundTag partsNbt = new CompoundTag();
@@ -209,13 +127,6 @@ public class ExodusPlayerData {
         }
         nbt.put("bodyParts", partsNbt);
 
-        // Сохраняем физиологию
-        nbt.putFloat("bloodLevel", bloodLevel);
-        nbt.putFloat("bodyTemperature", bodyTemperature);
-        nbt.putLong("lastCriticalHPCheck", lastCriticalHPCheck);
-        nbt.putLong("starvationStartTime", starvationStartTime);
-        nbt.putLong("dehydrationStartTime", dehydrationStartTime);
-
         return nbt;
     }
 
@@ -223,12 +134,6 @@ public class ExodusPlayerData {
         // Загружаем базовую информацию
         if (nbt.contains("characterName")) {
             this.characterName = nbt.getString("characterName");
-        }
-        if (nbt.contains("level")) {
-            this.level = nbt.getInt("level");
-        }
-        if (nbt.contains("experience")) {
-            this.experience = nbt.getInt("experience");
         }
 
         // Загружаем части тела
@@ -241,23 +146,6 @@ public class ExodusPlayerData {
                     data.readNbt(partNbt);
                 }
             }
-        }
-
-        // Загружаем физиологию
-        if (nbt.contains("bloodLevel")) {
-            this.bloodLevel = nbt.getFloat("bloodLevel");
-        }
-        if (nbt.contains("bodyTemperature")) {
-            this.bodyTemperature = nbt.getFloat("bodyTemperature");
-        }
-        if (nbt.contains("lastCriticalHPCheck")) {
-            this.lastCriticalHPCheck = nbt.getLong("lastCriticalHPCheck");
-        }
-        if (nbt.contains("starvationStartTime")) {
-            this.starvationStartTime = nbt.getLong("starvationStartTime");
-        }
-        if (nbt.contains("dehydrationStartTime")) {
-            this.dehydrationStartTime = nbt.getLong("dehydrationStartTime");
         }
     }
 }
