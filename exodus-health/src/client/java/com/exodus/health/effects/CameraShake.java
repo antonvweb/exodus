@@ -3,82 +3,56 @@ package com.exodus.health.effects;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.player.Player;
 
 /**
- * Система тряски камеры при получении урона - ПОЛНОСТЬЮ ПЕРЕПИСАННАЯ
+ * Откат камеры при получении урона - ИСПОЛЬЗУЕТ ВАНИЛЬНУЮ МЕХАНИКУ
+ * Просто вызываем стандартную функцию поворота камеры при ударе
  */
 public class CameraShake {
 
-    private static float shakeIntensity = 0.0f;
-    private static long shakeStartTime = 0;
-    private static final long SHAKE_DURATION = 300; // 0.3 секунды - быстрая и резкая
-
     private static final RandomSource RANDOM = RandomSource.create();
-    private static float targetYaw = 0.0f;
-    private static float targetPitch = 0.0f;
-    private static float currentYaw = 0.0f;
-    private static float currentPitch = 0.0f;
 
     /**
-     * Добавить тряску камеры
+     * Сила отклонения камеры
+     * Чем больше - тем сильнее отбрасывает камеру
+     * РЕКОМЕНДУЕТСЯ: 0.1-0.5
+     */
+    private static final float KNOCKBACK_STRENGTH = 10f;
+
+    /**
+     * Добавить откат камеры - ВАНИЛЬНЫЙ СПОСОБ
      */
     public static void addShake(float damage) {
-        shakeStartTime = System.currentTimeMillis();
-
-        // Интенсивность от урона: 2.0 - 10.0
-        shakeIntensity = Mth.clamp(damage * 1.2f, 2.0f, 10.0f);
-
-        // Случайное направление тряски
-        targetYaw = (RANDOM.nextFloat() - 0.5f) * 2.0f * shakeIntensity;
-        targetPitch = (RANDOM.nextFloat() - 0.5f) * 1.5f * shakeIntensity;
-
-        System.out.println("=== CAMERA SHAKE! Damage: " + damage + ", Intensity: " + shakeIntensity + " ===");
-    }
-
-    /**
-     * Применить тряску к камере игрока (вызывается каждый кадр)
-     */
-    public static void applyToCamera() {
-        if (!isShaking()) {
-            currentYaw = 0.0f;
-            currentPitch = 0.0f;
-            return;
-        }
-
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) {
             return;
         }
 
-        long elapsed = System.currentTimeMillis() - shakeStartTime;
-        float progress = (float) elapsed / SHAKE_DURATION;
+        Player player = mc.player;
 
-        // Быстрое затухание (exponential decay)
-        float decay = (float) Math.pow(1.0f - progress, 3.0);
+        // Вычисляем силу на основе урона
+        float strength = damage * KNOCKBACK_STRENGTH;
 
-        // Интерполяция к целевой позиции с отскоком
-        float bounce = (float) Math.sin(progress * Math.PI * 3.0) * decay;
+        // Случайное направление (как в ванилле при ударе)
+        float yaw = (RANDOM.nextFloat() - 0.5f) * strength;
+        float pitch = (RANDOM.nextFloat() * 0.5f) * strength; // Вверх
 
-        currentYaw = targetYaw * bounce;
-        currentPitch = targetPitch * bounce;
+        // ✅ ИСПОЛЬЗУЕМ ВАНИЛЬНУЮ ФУНКЦИЮ turn()
+        // Это та же функция которую использует Minecraft при ударе
+        player.turn(yaw, -pitch); // Минус чтобы камера шла вверх
 
-        // Применяем тряску
-        if (currentYaw != 0.0f || currentPitch != 0.0f) {
-            mc.player.turn(currentYaw * 0.1f, currentPitch * 0.1f);
-        }
+        System.out.println("=== CAMERA KNOCKBACK! Damage: " + damage + ", Strength: " + strength + " ===");
     }
 
     /**
-     * Проверить идёт ли тряска
+     * Применить к камере - НЕ НУЖНО, всё делает turn() сразу
      */
-    private static boolean isShaking() {
-        return System.currentTimeMillis() - shakeStartTime < SHAKE_DURATION;
+    public static void applyToCamera() {
+        // Пусто - эффект применяется сразу в addShake()
     }
 
-    /**
-     * Debug: проверка активности тряски
-     */
     public static boolean isActive() {
-        return isShaking();
+        return false; // Нет анимации - эффект мгновенный
     }
 }
