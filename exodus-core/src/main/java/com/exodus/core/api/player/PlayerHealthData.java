@@ -10,6 +10,9 @@ import java.util.Map;
  */
 public class PlayerHealthData {
 
+    // Специальное значение для бесконечной длительности (например, перелом)
+    public static final int INFINITE_DURATION = -1;
+
     // ============ ПОКАЗАТЕЛИ ============
     private float currentHP;
     private float maxHP;
@@ -18,9 +21,9 @@ public class PlayerHealthData {
     private float jump;
 
     // ============ СТАТУСНЫЕ ЭФФЕКТЫ ============
-    // Ключ - эффект, значение - время окончания (в тиках)
+    // Ключ - эффект, значение - время окончания (в тиках) или INFINITE_DURATION
     private final Map<StatusEffect, Integer> activeEffects;
-    
+
     // Интенсивность эффектов (0.0 - 1.0)
     private final Map<StatusEffect, Float> effectIntensity;
 
@@ -86,7 +89,7 @@ public class PlayerHealthData {
     /**
      * Добавить статусный эффект
      * @param effect эффект
-     * @param duration длительность в тиках (20 тиков = 1 секунда)
+     * @param duration длительность в тиках (20 тиков = 1 секунда) или INFINITE_DURATION
      * @param intensity интенсивность (0.0 - 1.0)
      */
     public void addEffect(StatusEffect effect, int duration, float intensity) {
@@ -106,11 +109,18 @@ public class PlayerHealthData {
      * Проверить есть ли эффект
      */
     public boolean hasEffect(StatusEffect effect) {
-        return activeEffects.containsKey(effect) && activeEffects.get(effect) > 0;
+        if (!activeEffects.containsKey(effect)) {
+            return false;
+        }
+
+        int duration = activeEffects.get(effect);
+        // Бесконечный эффект всегда активен
+        return duration == INFINITE_DURATION || duration > 0;
     }
 
     /**
      * Получить оставшееся время эффекта (в тиках)
+     * Возвращает INFINITE_DURATION для бесконечных эффектов
      */
     public int getEffectDuration(StatusEffect effect) {
         return activeEffects.getOrDefault(effect, 0);
@@ -134,9 +144,16 @@ public class PlayerHealthData {
      * Обновить эффекты (вызывается каждый тик)
      */
     public void tickEffects() {
-        // Уменьшаем таймеры
+        // Уменьшаем таймеры (кроме бесконечных)
         activeEffects.entrySet().removeIf(entry -> {
-            int newDuration = entry.getValue() - 1;
+            int duration = entry.getValue();
+
+            // Бесконечные эффекты не уменьшаем
+            if (duration == INFINITE_DURATION) {
+                return false;
+            }
+
+            int newDuration = duration - 1;
             if (newDuration <= 0) {
                 effectIntensity.remove(entry.getKey());
                 return true;
@@ -184,7 +201,7 @@ public class PlayerHealthData {
                     CompoundTag effectNbt = effectsNbt.getCompound(effect.getId());
                     int duration = effectNbt.getInt("duration");
                     float intensity = effectNbt.getFloat("intensity");
-                    
+
                     activeEffects.put(effect, duration);
                     effectIntensity.put(effect, intensity);
                 }

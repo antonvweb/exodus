@@ -41,12 +41,16 @@ public class PlayerHealthManager {
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
             if (!alive) { // Игрок умер и респавнился
                 PlayerHealthComponent component = getComponent(newPlayer);
+
+                // Восстанавливаем HP
                 component.getData().setCurrentHP(component.getData().getMaxHP());
-                
-                // Убираем все эффекты
-                for (var effect : StatusEffect.values()) {
+
+                // ✅ Убираем ВСЕ эффекты (включая бесконечные переломы)
+                for (StatusEffect effect : StatusEffect.values()) {
                     component.removeEffect(effect);
                 }
+
+                System.out.println("=== PLAYER RESPAWNED: All effects cleared, HP restored ===");
             }
         });
 
@@ -58,6 +62,8 @@ public class PlayerHealthManager {
             CompoundTag nbt = new CompoundTag();
             oldComp.writeNbt(nbt);
             newComp.readNbt(nbt);
+
+            System.out.println("=== PLAYER DIMENSION CHANGE: Data copied ===");
         });
     }
 }

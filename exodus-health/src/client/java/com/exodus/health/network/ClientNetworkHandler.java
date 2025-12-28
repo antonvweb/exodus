@@ -24,21 +24,21 @@ public class ClientNetworkHandler {
 
             // Выполняем на главном потоке клиента
             Minecraft.getInstance().execute(() -> {
-                System.out.println("=== APPLYING EFFECTS ON CLIENT... ===");
+                System.out.println("=== APPLYING CLIENT EFFECTS... ===");
 
-                // ✅ Тряска камеры
+                // ✅ Тряска камеры (простая как в ванилле)
                 CameraShake.addShake(damage);
 
-                // ✅ Звук удара
+                // ✅ Звук удара (зависит от силы урона)
                 if (damage >= 5.0f) {
-                    // Тяжёлый удар (>= 5 урона)
+                    // Тяжёлый удар
                     DamageSounds.playCriticalHurtSound(damage);
                 } else {
                     // Обычный удар
                     DamageSounds.playHurtSound(damage);
                 }
 
-                System.out.println("=== EFFECTS APPLIED! ===");
+                System.out.println("=== CLIENT EFFECTS APPLIED! ===");
             });
         });
 

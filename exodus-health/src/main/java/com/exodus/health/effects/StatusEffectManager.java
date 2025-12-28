@@ -2,6 +2,7 @@ package com.exodus.health.effects;
 
 import com.exodus.core.ExodusCoreAPI;
 import com.exodus.core.api.player.StatusEffect;
+import com.exodus.health.damage.DeathHandler;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -35,15 +36,57 @@ public class StatusEffectManager {
         // Обновляем таймеры эффектов
         ExodusCoreAPI.getHealthComponent(player).tick();
 
-        // Применяем эффекты каждые 20 тиков (1 секунда)
+        updatePainEffect(player);
+
+        // Применяем урон от эффектов каждые 20 тиков (1 секунда)
         if (tickCounter % 20 == 0) {
             applyBleedingDamage(player);
-            applyPoisonDamage(player);
+
+            checkDeathFromEffects(player);
         }
 
         // Применяем дебафы каждый тик
         applyFractureDebuff(player);
         applyPainDebuff(player);
+    }
+
+    /**
+     * Проверка смерти от эффектов (кровотечения и т.д.)
+     */
+    private static void checkDeathFromEffects(ServerPlayer player) {
+        if (!ExodusCoreAPI.isAlive(player)) {
+            // Игрок умер от кровотечения или другого эффекта
+            DeathHandler.checkDeath(player, player.damageSources().starve());
+        }
+    }
+
+    /**
+     * Автоматическое наложение боли
+     * Боль накладывается пока есть кровотечение или перелом
+     */
+    private static void updatePainEffect(ServerPlayer player) {
+        boolean hasBleeding = ExodusCoreAPI.hasEffect(player, StatusEffect.BLEEDING);
+        boolean hasFracture = ExodusCoreAPI.hasEffect(player, StatusEffect.FRACTURE);
+
+        if (hasBleeding || hasFracture) {
+            // Рассчитываем интенсивность боли на основе других эффектов
+            float painIntensity = 0f;
+
+            if (hasBleeding) {
+                float bleedingIntensity = ExodusCoreAPI.getEffectIntensity(player, StatusEffect.BLEEDING);
+                painIntensity = Math.max(painIntensity, bleedingIntensity * 0.7f);
+            }
+
+            if (hasFracture) {
+                float fractureIntensity = ExodusCoreAPI.getEffectIntensity(player, StatusEffect.FRACTURE);
+                painIntensity = Math.max(painIntensity, fractureIntensity * 0.8f);
+            }
+
+            // Накладываем боль (продлеваем каждый тик = постоянный эффект)
+            // Длительность 2 тика чтобы не пропадал между обновлениями
+            ExodusCoreAPI.addEffect(player, StatusEffect.PAIN, 2, painIntensity);
+        }
+        // Если нет кровотечения и перелома - боль сама истечёт
     }
 
     /**
@@ -55,34 +98,21 @@ public class StatusEffectManager {
         }
 
         float intensity = ExodusCoreAPI.getEffectIntensity(player, StatusEffect.BLEEDING);
-        
-        // Урон 1-5 HP/сек в зависимости от интенсивности
-        float damage = 1.0f + (intensity * 4.0f);
-        
-        ExodusCoreAPI.damage(player, damage);
-    }
 
-    /**
-     * Отравление - урон + тошнота
-     */
-    private static void applyPoisonDamage(ServerPlayer player) {
-        if (!ExodusCoreAPI.hasEffect(player, StatusEffect.POISONED)) {
-            return;
+        // Урон 0.5-3 HP/сек в зависимости от интенсивности
+        float damage = 0.5f + (intensity * 2.5f);
+
+        ExodusCoreAPI.damage(player, damage);
+
+        // Логируем для отладки
+        if (ExodusCoreAPI.getCurrentHP(player) <= 10) {
+            System.out.println("=== LOW HP FROM BLEEDING! HP: " + ExodusCoreAPI.getCurrentHP(player) + " ===");
         }
-
-        float intensity = ExodusCoreAPI.getEffectIntensity(player, StatusEffect.POISONED);
-        
-        // Урон 0.5-2 HP/сек
-        float damage = 0.5f + (intensity * 1.5f);
-        ExodusCoreAPI.damage(player, damage);
-
-        // Эффект тошноты
-        int duration = (int) (intensity * 40); // 1-2 секунды
-        player.addEffect(new MobEffectInstance(MobEffects.CONFUSION, duration, 0, false, false));
     }
 
     /**
-     * Перелом - замедление
+     * Перелом - сильное замедление
+     * ПОСТОЯННЫЙ ЭФФЕКТ (убирается только лечением)
      */
     private static void applyFractureDebuff(ServerPlayer player) {
         if (!ExodusCoreAPI.hasEffect(player, StatusEffect.FRACTURE)) {
@@ -90,14 +120,16 @@ public class StatusEffectManager {
         }
 
         float intensity = ExodusCoreAPI.getEffectIntensity(player, StatusEffect.FRACTURE);
-        
-        // Замедление (уровень зависит от интенсивности)
-        int amplifier = (int) (intensity * 3); // 0-3 уровень
+
+        // Сильное замедление (уровень зависит от интенсивности)
+        // 0.3-1.0 интенсивность = 1-4 уровень замедления
+        int amplifier = Math.max(0, (int) (intensity * 4));
         player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, amplifier, false, false));
     }
 
     /**
-     * Боль - тошнота + замедление
+     * Боль - замедление копания + лёгкое замедление движения
+     * АВТОМАТИЧЕСКИЙ ЭФФЕКТ (пока есть кровотечение или перелом)
      */
     private static void applyPainDebuff(ServerPlayer player) {
         if (!ExodusCoreAPI.hasEffect(player, StatusEffect.PAIN)) {
@@ -105,13 +137,20 @@ public class StatusEffectManager {
         }
 
         float intensity = ExodusCoreAPI.getEffectIntensity(player, StatusEffect.PAIN);
-        
-        // Слабое замедление
-        int slowness = (int) (intensity * 1); // 0-1 уровень
-        player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, slowness, false, false));
 
-        // При сильной боли - тошнота
-        if (intensity > 0.5f) {
+        // Замедление копания (Mining Fatigue)
+        // 0.3-1.0 интенсивность = 0-2 уровень
+        int miningAmplifier = Math.max(0, (int) (intensity * 2));
+        player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 2, miningAmplifier, false, false));
+
+        // Лёгкое замедление движения
+        int movementAmplifier = (int) (intensity * 0.5f); // 0 уровень в большинстве случаев
+        if (movementAmplifier > 0) {
+            player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, movementAmplifier, false, false));
+        }
+
+        // При сильной боли (>70%) - тошнота
+        if (intensity > 0.7f) {
             player.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 2, 0, false, false));
         }
     }

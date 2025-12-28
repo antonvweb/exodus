@@ -1,58 +1,108 @@
 package com.exodus.health.effects;
 
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.Camera;
 import net.minecraft.util.Mth;
-import net.minecraft.util.RandomSource;
-import net.minecraft.world.entity.player.Player;
+
+import java.lang.reflect.Method;
 
 /**
- * Откат камеры при получении урона - ИСПОЛЬЗУЕТ ВАНИЛЬНУЮ МЕХАНИКУ
- * Просто вызываем стандартную функцию поворота камеры при ударе
+ * Простая тряска камеры при получении урона - КАК В ВАНИЛЬНОМ МАЙНКРАФТЕ
+ * Камера просто немного качается вверх-вниз на короткое время
  */
 public class CameraShake {
 
-    private static final RandomSource RANDOM = RandomSource.create();
+    // Параметры тряски
+    private static float intensity = 0f;          // Сила тряски (0-1)
+    private static long startTime = 0;            // Время начала
+    private static final long DURATION = 300;     // Длительность 300мс (как в ванилле)
+
+    // Текущее смещение камеры
+    private static float currentOffset = 0f;
+
+    // Reflection для доступа к Camera.setRotation()
+    private static Method setRotationMethod = null;
+    private static boolean reflectionFailed = false;
 
     /**
-     * Сила отклонения камеры
-     * Чем больше - тем сильнее отбрасывает камеру
-     * РЕКОМЕНДУЕТСЯ: 0.1-0.5
-     */
-    private static final float KNOCKBACK_STRENGTH = 10f;
-
-    /**
-     * Добавить откат камеры - ВАНИЛЬНЫЙ СПОСОБ
+     * Добавить тряску камеры
+     * @param damage количество урона (влияет на силу тряски)
      */
     public static void addShake(float damage) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) {
+        // Сила тряски зависит от урона: 0.3-1.5 градуса
+        // Даже маленький урон даёт небольшую тряску
+        intensity = Mth.clamp(damage / 10.0f, 0.3f, 1.5f);
+        startTime = System.currentTimeMillis();
+
+        System.out.println("=== CAMERA SHAKE! Damage: " + damage + ", Intensity: " + intensity + " ===");
+    }
+
+    /**
+     * Обновить тряску каждый кадр
+     * Вызывается из CameraShakeMixin
+     */
+    public static void tick() {
+        if (!isActive()) {
+            currentOffset = 0f;
             return;
         }
 
-        Player player = mc.player;
+        long elapsed = System.currentTimeMillis() - startTime;
+        float progress = (float) elapsed / DURATION; // 0.0 -> 1.0
 
-        // Вычисляем силу на основе урона
-        float strength = damage * KNOCKBACK_STRENGTH;
+        // Затухание (сначала сильно, потом слабее)
+        float fade = 1.0f - progress;
 
-        // Случайное направление (как в ванилле при ударе)
-        float yaw = (RANDOM.nextFloat() - 0.5f) * strength;
-        float pitch = (RANDOM.nextFloat() * 0.5f) * strength; // Вверх
+        // Колебание (синусоида для плавности)
+        // Частота: 3 колебания за время тряски
+        float wave = (float) Math.sin(progress * Math.PI * 6);
 
-        // ✅ ИСПОЛЬЗУЕМ ВАНИЛЬНУЮ ФУНКЦИЮ turn()
-        // Это та же функция которую использует Minecraft при ударе
-        player.turn(yaw, -pitch); // Минус чтобы камера шла вверх
-
-        System.out.println("=== CAMERA KNOCKBACK! Damage: " + damage + ", Strength: " + strength + " ===");
+        // Итоговое смещение pitch (в градусах)
+        currentOffset = wave * intensity * fade;
     }
 
     /**
-     * Применить к камере - НЕ НУЖНО, всё делает turn() сразу
+     * Применить смещение к камере
+     * Использует reflection для доступа к Camera.setRotation()
      */
-    public static void applyToCamera() {
-        // Пусто - эффект применяется сразу в addShake()
+    public static void applyToCamera(Camera camera) {
+        if (!isActive() || Math.abs(currentOffset) < 0.01f) {
+            return;
+        }
+
+        if (reflectionFailed) {
+            return;
+        }
+
+        try {
+            // Инициализируем reflection один раз
+            if (setRotationMethod == null) {
+                setRotationMethod = Camera.class.getDeclaredMethod("setRotation", float.class, float.class);
+                setRotationMethod.setAccessible(true);
+                System.out.println("=== CAMERA SHAKE: Reflection initialized successfully ===");
+            }
+
+            // Применяем смещение к pitch (вверх-вниз)
+            setRotationMethod.invoke(camera, camera.getYRot(), camera.getXRot() + currentOffset);
+
+        } catch (Exception e) {
+            System.err.println("=== CAMERA SHAKE: Reflection failed! ===");
+            e.printStackTrace();
+            reflectionFailed = true;
+        }
     }
 
+    /**
+     * Проверить активна ли тряска
+     */
     public static boolean isActive() {
-        return false; // Нет анимации - эффект мгновенный
+        long elapsed = System.currentTimeMillis() - startTime;
+        return elapsed < DURATION && intensity > 0;
+    }
+
+    /**
+     * Получить текущее смещение (для отладки)
+     */
+    public static float getCurrentOffset() {
+        return currentOffset;
     }
 }

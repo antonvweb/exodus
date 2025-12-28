@@ -6,8 +6,7 @@ package com.exodus.core.api.player;
 public enum StatusEffect {
     BLEEDING("bleeding", "Кровотечение", 0xFF0000),      // Красный
     FRACTURE("fracture", "Перелом", 0xFFFFFF),            // Белый
-    PAIN("pain", "Боль", 0xFF6600),                       // Оранжевый
-    POISONED("poisoned", "Отравление", 0x00FF00);        // Зелёный
+    PAIN("pain", "Боль", 0xFF6600);                       // Оранжевый
 
     private final String id;
     private final String displayName;

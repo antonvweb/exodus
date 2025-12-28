@@ -1,6 +1,7 @@
 package com.exodus.health.mixin;
 
 import com.exodus.core.ExodusCoreAPI;
+import com.exodus.core.api.player.PlayerHealthData;
 import com.exodus.core.api.player.StatusEffect;
 import com.exodus.health.damage.DeathHandler;
 import com.exodus.health.network.DamagePacket;
@@ -60,18 +61,38 @@ public abstract class PlayerDamageMixin {
         // Добавляем статусные эффекты
         applyStatusEffects(player, source, amount);
 
-        // Устанавливаем hurtTime (для ванильной анимации)
+        // ✅ Устанавливаем hurtTime (для ванильной анимации и красной модели)
         player.hurtTime = 10;
         player.hurtDuration = 10;
 
-        // Применяем откидывание (knockback) если есть атакующий
+        // ✅ Применяем откидывание (knockback) если есть атакующий
         Entity attacker = source.getEntity();
         if (attacker != null) {
-            player.knockback(
-                    0.4,
-                    attacker.getX() - player.getX(),
-                    attacker.getZ() - player.getZ()
+            // Вычисляем направление от атакующего к игроку
+            double dx = player.getX() - attacker.getX();
+            double dz = player.getZ() - attacker.getZ();
+
+            // Нормализуем вектор
+            double distance = Math.sqrt(dx * dx + dz * dz);
+            if (distance > 0) {
+                dx /= distance;
+                dz /= distance;
+            }
+
+            // Сила отталкивания (0.4 = стандартная ванильная)
+            double strength = 0.4;
+
+            // Применяем velocity напрямую
+            player.setDeltaMovement(
+                    player.getDeltaMovement().add(
+                            dx * strength,
+                            0.1, // Небольшой подъём вверх
+                            dz * strength
+                    )
             );
+
+            // ✅ Важно! Обновляем движение на клиенте
+            player.hurtMarked = true;
         }
 
         // ПРОВЕРКА СМЕРТИ
@@ -88,42 +109,76 @@ public abstract class PlayerDamageMixin {
         cir.cancel();
     }
 
+    /**
+     * Наложение статусных эффектов в зависимости от типа урона
+     */
     private void applyStatusEffects(Player player, DamageSource source, float damage) {
+
+        // ========== ПАДЕНИЕ ==========
         if (source.is(net.minecraft.world.damagesource.DamageTypes.FALL)) {
-            if (damage > 5.0f && Math.random() < 0.5f) {
-                int duration = 30 + (int) (Math.random() * 30);
-                float intensity = Math.min(1.0f, damage / 20.0f);
-                ExodusCoreAPI.addEffect(player, StatusEffect.FRACTURE, duration, intensity);
+            // При сильном падении (>5 урона) - перелом
+            if (damage > 5.0f) {
+                // 50% шанс перелома при урон 5-10 HP
+                // 100% шанс при уроне >10 HP
+                double fractureChance = damage > 10.0f ? 1.0 : 0.5;
+
+                if (Math.random() < fractureChance) {
+                    float intensity = Math.min(1.0f, damage / 20.0f);
+
+                    // ✅ ПЕРЕЛОМ - БЕСКОНЕЧНАЯ ДЛИТЕЛЬНОСТЬ
+                    ExodusCoreAPI.getHealthComponent(player).addEffect(
+                            StatusEffect.FRACTURE,
+                            PlayerHealthData.INFINITE_DURATION, // Бесконечный эффект
+                            intensity
+                    );
+
+                    player.sendSystemMessage(Component.literal("§c⚠ У вас перелом! Требуется лечение."));
+                }
             }
         }
 
+        // ========== АТАКА МОБА ==========
         Entity attacker = source.getEntity();
         if (attacker != null && !source.is(net.minecraft.world.damagesource.DamageTypes.EXPLOSION)) {
-            int duration = 10 + (int) (Math.random() * 10);
-            float intensity = Math.min(1.0f, damage / 15.0f);
-            ExodusCoreAPI.addEffect(player, StatusEffect.PAIN, duration, intensity);
 
-            if (Math.random() < 0.3f) {
-                duration = 20 + (int) (Math.random() * 20);
-                intensity = Math.min(0.8f, damage / 20.0f);
+            // 40% шанс кровотечения от обычной атаки
+            if (Math.random() < 0.4f) {
+                // ✅ Длительность 60-120 секунд (увеличено с 20-40)
+                int duration = 60 + (int) (Math.random() * 60);
+                float intensity = Math.min(0.8f, damage / 20.0f);
+
                 ExodusCoreAPI.addEffect(player, StatusEffect.BLEEDING, duration, intensity);
             }
         }
 
+        // ========== ВЗРЫВ ==========
         if (source.is(net.minecraft.world.damagesource.DamageTypes.EXPLOSION) ||
                 source.is(net.minecraft.world.damagesource.DamageTypes.PLAYER_EXPLOSION)) {
 
             float intensity = Math.min(1.0f, damage / 15.0f);
-            ExodusCoreAPI.addEffect(player, StatusEffect.PAIN, 30, intensity);
 
-            if (Math.random() < 0.7f) {
-                ExodusCoreAPI.addEffect(player, StatusEffect.BLEEDING, 40, intensity);
+            // 80% шанс кровотечения от взрыва (увеличено с 70%)
+            if (Math.random() < 0.8f) {
+                // ✅ Длительность 90-150 секунд (серьёзное кровотечение)
+                int duration = 90 + (int) (Math.random() * 60);
+                ExodusCoreAPI.addEffect(player, StatusEffect.BLEEDING, duration, intensity);
             }
 
-            if (Math.random() < 0.5f) {
-                ExodusCoreAPI.addEffect(player, StatusEffect.FRACTURE, 60, intensity * 0.8f);
+            // 60% шанс перелома от взрыва (увеличено с 50%)
+            if (Math.random() < 0.6f) {
+                // ✅ ПЕРЕЛОМ - БЕСКОНЕЧНАЯ ДЛИТЕЛЬНОСТЬ
+                ExodusCoreAPI.getHealthComponent(player).addEffect(
+                        StatusEffect.FRACTURE,
+                        PlayerHealthData.INFINITE_DURATION,
+                        intensity * 0.9f
+                );
+
+                player.sendSystemMessage(Component.literal("§c⚠ У вас перелом! Требуется лечение."));
             }
         }
+
+        // ✅ БОЛЬ НАКЛАДЫВАЕТСЯ АВТОМАТИЧЕСКИ в StatusEffectManager
+        // Если есть кровотечение или перелом - боль появится сама
     }
 
     private void sendDamageMessage(Player player, DamageSource source, float damage) {
