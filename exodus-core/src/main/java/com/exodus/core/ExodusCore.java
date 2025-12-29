@@ -13,6 +13,7 @@ public class ExodusCore implements ModInitializer {
     public void onInitialize() {
         LOGGER.info("Exodus Core - Initialization");
 
+        // Регистрируем события игрока
         PlayerHealthManager.registerEvents();
 
         LOGGER.info("Exodus Core - Initialized successfully");

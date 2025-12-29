@@ -10,15 +10,61 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Менеджер компонентов здоровья игроков
- * Система 6 частей тела
+ * Менеджер компонентов игрока
+ * Управляет: здоровьем, статами, витальными показателями
  */
 public class PlayerHealthManager {
-
+    private static final Map<UUID, PlayerStatsComponent> statsComponents = new HashMap<>();
     private static final Map<UUID, PlayerHealthComponent> components = new HashMap<>();
+    private static final Map<UUID, PlayerVitalsComponent> vitalsComponents = new HashMap<>();
+
+    // ============ СТАТЫ ============
 
     /**
-     * Получить компонент игрока (создаёт если не существует)
+     * Получить компонент статов игрока (создаёт если не существует)
+     */
+    public static PlayerStatsComponent getStatsComponent(Player player) {
+        return statsComponents.computeIfAbsent(
+                player.getUUID(),
+                uuid -> new PlayerStatsComponent(player)
+        );
+    }
+
+    /**
+     * Удалить компонент статов игрока
+     */
+    public static void removeStatsComponent(UUID uuid) {
+        statsComponents.remove(uuid);
+    }
+
+    // ============ ВИТАЛЬНЫЕ ПОКАЗАТЕЛИ ============
+
+    /**
+     * Получить компонент витальных показателей игрока (создаёт если не существует)
+     */
+    public static PlayerVitalsComponent getVitalsComponent(Player player) {
+        return vitalsComponents.computeIfAbsent(
+                player.getUUID(),
+                uuid -> {
+                    PlayerVitalsComponent vitals = new PlayerVitalsComponent(player);
+                    // Обновляем максимумы на основе статов
+                    vitals.updateMaxValues(getStatsComponent(player));
+                    return vitals;
+                }
+        );
+    }
+
+    /**
+     * Удалить компонент витальных показателей игрока
+     */
+    public static void removeVitalsComponent(UUID uuid) {
+        vitalsComponents.remove(uuid);
+    }
+
+    // ============ ЗДОРОВЬЕ ============
+
+    /**
+     * Получить компонент здоровья игрока (создаёт если не существует)
      */
     public static PlayerHealthComponent getComponent(Player player) {
         return components.computeIfAbsent(
@@ -28,53 +74,84 @@ public class PlayerHealthManager {
     }
 
     /**
-     * Удалить компонент игрока
+     * Удалить компонент здоровья игрока
      */
     public static void removeComponent(UUID uuid) {
         components.remove(uuid);
     }
 
+    // ============ РЕГИСТРАЦИЯ СОБЫТИЙ ============
+
     /**
      * Регистрация событий
      */
     public static void registerEvents() {
-        // При респавне - полное восстановление HP всех частей тела
+        // При респавне - полное восстановление
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
             if (!alive) { // Игрок умер и респавнился
-                PlayerHealthComponent component = getComponent(newPlayer);
+                PlayerHealthComponent healthComp = getComponent(newPlayer);
+                PlayerStatsComponent statsComp = getStatsComponent(newPlayer);
+                PlayerVitalsComponent vitalsComp = getVitalsComponent(newPlayer);
 
                 // ✅ Восстанавливаем HP всех частей тела
                 for (BodyPart part : BodyPart.values()) {
-                    component.getData().setBodyPartHP(part, part.getMaxHP());
+                    healthComp.getData().setBodyPartHP(part, part.getMaxHP());
                 }
 
                 // ✅ Убираем ВСЕ кровотечения
                 for (BodyPart part : BodyPart.values()) {
-                    if (component.getData().hasBleeding(part)) {
-                        component.removeBleeding(part);
+                    if (healthComp.getData().hasBleeding(part)) {
+                        healthComp.removeBleeding(part);
                     }
                 }
 
-                // ✅ Убираем ВСЕ переломы (включая бесконечные)
+                // ✅ Убираем ВСЕ переломы
                 for (BodyPart part : BodyPart.values()) {
-                    if (component.getData().hasFracture(part)) {
-                        component.removeFracture(part);
+                    if (healthComp.getData().hasFracture(part)) {
+                        healthComp.removeFracture(part);
                     }
                 }
 
                 // ✅ Убираем боль
-                component.removePain();
+                healthComp.removePain();
+
+                // ✅ Восстанавливаем витальные показатели
+                vitalsComp.setHunger(100.0f);
+                vitalsComp.setThirst(100.0f);
+                vitalsComp.setEnergy(vitalsComp.getMaxEnergy());
+                vitalsComp.setOxygen(vitalsComp.getMaxOxygen());
+                vitalsComp.setTemperature(37.0f);
+                vitalsComp.setMental(100.0f);
+
+                // ✅ Статы сохраняются после смерти (не сбрасываются)
             }
         });
 
         // При переходе между мирами - копируем данные
         ServerPlayerEvents.COPY_FROM.register((oldPlayer, newPlayer, alive) -> {
-            PlayerHealthComponent oldComp = getComponent(oldPlayer);
-            PlayerHealthComponent newComp = getComponent(newPlayer);
+            // Копируем здоровье
+            PlayerHealthComponent oldHealthComp = getComponent(oldPlayer);
+            PlayerHealthComponent newHealthComp = getComponent(newPlayer);
 
-            CompoundTag nbt = new CompoundTag();
-            oldComp.writeNbt(nbt);
-            newComp.readNbt(nbt);
+            CompoundTag healthNbt = new CompoundTag();
+            oldHealthComp.writeNbt(healthNbt);
+            newHealthComp.readNbt(healthNbt);
+
+            // ✅ Копируем статы
+            PlayerStatsComponent oldStatsComp = getStatsComponent(oldPlayer);
+            PlayerStatsComponent newStatsComp = getStatsComponent(newPlayer);
+
+            CompoundTag statsNbt = new CompoundTag();
+            oldStatsComp.writeNbt(statsNbt);
+            newStatsComp.readNbt(statsNbt);
+
+            // ✅ Копируем витальные показатели
+            PlayerVitalsComponent oldVitalsComp = getVitalsComponent(oldPlayer);
+            PlayerVitalsComponent newVitalsComp = getVitalsComponent(newPlayer);
+
+            CompoundTag vitalsNbt = new CompoundTag();
+            oldVitalsComp.writeNbt(vitalsNbt);
+            newVitalsComp.readNbt(vitalsNbt);
         });
     }
 }

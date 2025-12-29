@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "exodus-survival",
+  "version": "${version}",
+
+  "name": "exodus-survival",
+  "description": "",
+  "authors": [],
+  "contact": {},
+
+  "license": "All-Rights-Reserved",
+
+  "environment": "*",
+  "entrypoints": {
+    "client": [
+      "com.exodus.survival.client.ExodusSurvivalClient"
+    ],
+    "main": [
+      "com.exodus.survival.ExodusSurvival"
+    ]
+  },
+
+  "mixins": [
+    "exodus-survival.mixins.json"
+    ,{
+      "config": "exodus-survival.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
