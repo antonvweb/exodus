@@ -90,7 +90,6 @@ public class PlayerHealthManager {
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
             if (!alive) { // Игрок умер и респавнился
                 PlayerHealthComponent healthComp = getComponent(newPlayer);
-                PlayerStatsComponent statsComp = getStatsComponent(newPlayer);
                 PlayerVitalsComponent vitalsComp = getVitalsComponent(newPlayer);
 
                 // ✅ Восстанавливаем HP всех частей тела
@@ -101,27 +100,27 @@ public class PlayerHealthManager {
                 // ✅ Убираем ВСЕ кровотечения
                 for (BodyPart part : BodyPart.values()) {
                     if (healthComp.getData().hasBleeding(part)) {
-                        healthComp.removeBleeding(part);
+                        healthComp.getData().removeBleeding(part);
                     }
                 }
 
                 // ✅ Убираем ВСЕ переломы
                 for (BodyPart part : BodyPart.values()) {
                     if (healthComp.getData().hasFracture(part)) {
-                        healthComp.removeFracture(part);
+                        healthComp.getData().removeFracture(part);
                     }
                 }
 
                 // ✅ Убираем боль
-                healthComp.removePain();
+                healthComp.getData().removePain();
 
                 // ✅ Восстанавливаем витальные показатели
-                vitalsComp.setHunger(100.0f);
-                vitalsComp.setThirst(100.0f);
-                vitalsComp.setEnergy(vitalsComp.getMaxEnergy());
-                vitalsComp.setOxygen(vitalsComp.getMaxOxygen());
-                vitalsComp.setTemperature(37.0f);
-                vitalsComp.setMental(100.0f);
+                vitalsComp.getData().setHunger(100.0f);
+                vitalsComp.getData().setThirst(100.0f);
+                vitalsComp.getData().setEnergy(vitalsComp.getData().getMaxEnergy());
+                vitalsComp.getData().setOxygen(vitalsComp.getData().getMaxOxygen());
+                vitalsComp.getData().setTemperature(37.0f);
+                vitalsComp.getData().setMental(100.0f);
 
                 // ✅ Статы сохраняются после смерти (не сбрасываются)
             }

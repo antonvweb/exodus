@@ -1,12 +1,18 @@
 package com.exodus.core.player;
 
 import com.exodus.core.api.player.PlayerStatsData;
-import com.exodus.core.api.player.StatType;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
 
 /**
- * Компонент статов игрока
+ * Компонент статов игрока (УПРОЩЁННЫЙ)
+ * 
+ * Отвечает ТОЛЬКО за:
+ * - Хранение данных
+ * - Сохранение/загрузку (NBT)
+ * 
+ * ВСЯ ЛОГИКА находится в PlayerStatsData!
+ * ПУБЛИЧНЫЙ API находится в ExodusCoreAPI!
  */
 public class PlayerStatsComponent {
 
@@ -25,60 +31,18 @@ public class PlayerStatsComponent {
         return data;
     }
 
-    // ============ СТАТЫ ============
-
-    public int getStat(StatType stat) {
-        return data.getStat(stat);
-    }
-
-    public void setStat(StatType stat, int value) {
-        data.setStat(stat, value);
-    }
-
-    public boolean increaseStat(StatType stat) {
-        return data.increaseStat(stat);
-    }
-
-    // ============ УРОВЕНЬ И ОПЫТ ============
-
-    public int getLevel() {
-        return data.getLevel();
-    }
-
-    public void setLevel(int level) {
-        data.setLevel(level);
-    }
-
-    public float getExperience() {
-        return data.getExperience();
-    }
-
-    public void setExperience(float experience) {
-        data.setExperience(experience);
-    }
-
-    public void addExperience(float amount) {
-        data.addExperience(amount);
-    }
-
-    public float getExperienceForNextLevel() {
-        return data.getExperienceForNextLevel();
-    }
-
-    public int getFreePoints() {
-        return data.getFreePoints();
-    }
-
-    public void setFreePoints(int points) {
-        data.setFreePoints(points);
-    }
-
     // ============ NBT ============
 
+    /**
+     * Сохранить в NBT
+     */
     public void writeNbt(CompoundTag nbt) {
         data.writeNbt(nbt);
     }
 
+    /**
+     * Загрузить из NBT
+     */
     public void readNbt(CompoundTag nbt) {
         data.readNbt(nbt);
     }
