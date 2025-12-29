@@ -1,12 +1,12 @@
-package com.exodus.health.mixin;
+package com.exodus.survival.mixin;
 
 import com.exodus.core.ExodusCoreAPI;
 import com.exodus.core.api.player.BleedingType;
 import com.exodus.core.api.player.BodyPart;
 import com.exodus.core.api.player.PlayerHealthData;
-import com.exodus.health.damage.DeathHandler;
-import com.exodus.health.damage.HitboxDetection;
-import com.exodus.health.network.DamagePacket;
+import com.exodus.survival.health.damage.DeathHandler;
+import com.exodus.survival.health.damage.HitboxDetection;
+import com.exodus.survival.health.network.DamagePacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
