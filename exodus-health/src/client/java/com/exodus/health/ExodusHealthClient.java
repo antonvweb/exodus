@@ -10,7 +10,7 @@ public class ExodusHealthClient implements ClientModInitializer {
         System.out.println("=== EXODUS HEALTH CLIENT INIT ===");
 
         // Регистрируем HUD для отображения здоровья
-        HealthHud.register();
+        BodyHealthHud.register();
 
         // ✅ Регистрируем обработчики сетевых пакетов
         ClientNetworkHandler.register();

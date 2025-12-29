@@ -1,7 +1,8 @@
 package com.exodus.health.effects;
 
 import com.exodus.core.ExodusCoreAPI;
-import com.exodus.core.api.player.StatusEffect;
+import com.exodus.core.api.player.BodyPart;
+import com.exodus.core.api.player.PlayerHealthData;
 import com.exodus.health.damage.DeathHandler;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.level.ServerPlayer;
@@ -10,7 +11,7 @@ import net.minecraft.world.effect.MobEffects;
 
 /**
  * Менеджер статусных эффектов
- * Применяет урон и дебафы от эффектов каждый тик
+ * Система 6 частей тела + переливание урона от кровотечения
  */
 public class StatusEffectManager {
 
@@ -36,122 +37,235 @@ public class StatusEffectManager {
         // Обновляем таймеры эффектов
         ExodusCoreAPI.getHealthComponent(player).tick();
 
-        updatePainEffect(player);
-
-        // Применяем урон от эффектов каждые 20 тиков (1 секунда)
+        // Применяем урон от эффектов каждую секунду
         if (tickCounter % 20 == 0) {
             applyBleedingDamage(player);
 
+            // ✅ ПРОВЕРКА ТАЙМЕРА ТОРСА
+            checkTorsoDeathChance(player);
+
+            // ✅ ПРОВЕРКА СМЕРТИ
             checkDeathFromEffects(player);
         }
 
         // Применяем дебафы каждый тик
-        applyFractureDebuff(player);
-        applyPainDebuff(player);
+        applyFractureDebuffs(player);
+        applyPainDebuffs(player);
+
+        // ✅ Дебафы от уничтоженных конечностей
+        applyDestroyedLimbsDebuffs(player);
     }
 
     /**
-     * Проверка смерти от эффектов (кровотечения и т.д.)
+     * ✅ Проверка таймера торса - прогрессирующий шанс смерти
+     */
+    private static void checkTorsoDeathChance(ServerPlayer player) {
+        PlayerHealthData data = ExodusCoreAPI.getHealthData(player);
+
+        if (!data.isTorsoDestroyed()) {
+            return;
+        }
+
+        float deathChance = data.getTorsoDeathChance();
+
+        // Если шанс 100% или выпал случайный шанс - смерть
+        if (deathChance >= 1.0f || Math.random() < deathChance) {
+            DeathHandler.checkDeath(player, player.damageSources().generic());
+        }
+    }
+
+    /**
+     * Проверка смерти
      */
     private static void checkDeathFromEffects(ServerPlayer player) {
         if (!ExodusCoreAPI.isAlive(player)) {
-            // Игрок умер от кровотечения или другого эффекта
-            DeathHandler.checkDeath(player, player.damageSources().starve());
+            PlayerHealthData.DeathCause cause = ExodusCoreAPI.getHealthData(player).getDeathCause();
+
+            if (cause == PlayerHealthData.DeathCause.BLEEDING) {
+                DeathHandler.checkDeath(player, player.damageSources().starve());
+            } else {
+                DeathHandler.checkDeath(player, player.damageSources().generic());
+            }
         }
     }
 
     /**
-     * Автоматическое наложение боли
-     * Боль накладывается пока есть кровотечение или перелом
-     */
-    private static void updatePainEffect(ServerPlayer player) {
-        boolean hasBleeding = ExodusCoreAPI.hasEffect(player, StatusEffect.BLEEDING);
-        boolean hasFracture = ExodusCoreAPI.hasEffect(player, StatusEffect.FRACTURE);
-
-        if (hasBleeding || hasFracture) {
-            // Рассчитываем интенсивность боли на основе других эффектов
-            float painIntensity = 0f;
-
-            if (hasBleeding) {
-                float bleedingIntensity = ExodusCoreAPI.getEffectIntensity(player, StatusEffect.BLEEDING);
-                painIntensity = Math.max(painIntensity, bleedingIntensity * 0.7f);
-            }
-
-            if (hasFracture) {
-                float fractureIntensity = ExodusCoreAPI.getEffectIntensity(player, StatusEffect.FRACTURE);
-                painIntensity = Math.max(painIntensity, fractureIntensity * 0.8f);
-            }
-
-            // Накладываем боль (продлеваем каждый тик = постоянный эффект)
-            // Длительность 2 тика чтобы не пропадал между обновлениями
-            ExodusCoreAPI.addEffect(player, StatusEffect.PAIN, 2, painIntensity);
-        }
-        // Если нет кровотечения и перелома - боль сама истечёт
-    }
-
-    /**
-     * Кровотечение - урон со временем
+     * ✅ Кровотечение - урон с ПЕРЕЛИВАНИЕМ при уничтожении части
+     *
+     * Механика:
+     * 1. Часть жива → урон идёт по ней
+     * 2. Часть уничтожена (HP = 0) → урон переливается на ВСЕ живые части ПОРОВНУ
+     * 3. СУММИРОВАНИЕ: если уничтожено несколько частей, урон складывается
      */
     private static void applyBleedingDamage(ServerPlayer player) {
-        if (!ExodusCoreAPI.hasEffect(player, StatusEffect.BLEEDING)) {
-            return;
+        PlayerHealthData data = ExodusCoreAPI.getHealthData(player);
+
+        // Сначала применяем урон ко всем кровоточащим ЖИВЫМ частям
+        for (BodyPart part : BodyPart.values()) {
+            if (data.hasBleeding(part)) {
+                float partHP = ExodusCoreAPI.getBodyPartHP(player, part);
+
+                if (partHP > 0) {
+                    // ✅ Часть жива - урон идёт по ней
+                    float damage = data.getBleedingDamage(part);
+                    ExodusCoreAPI.damageBodyPart(player, part, damage);
+                }
+            }
         }
 
-        float intensity = ExodusCoreAPI.getEffectIntensity(player, StatusEffect.BLEEDING);
+        // ✅ Затем применяем ПЕРЕЛИВАНИЕ от всех уничтоженных частей
+        float totalOverflowDamage = 0f;
 
-        // Урон 0.5-3 HP/сек в зависимости от интенсивности
-        float damage = 0.5f + (intensity * 2.5f);
+        for (BodyPart part : BodyPart.values()) {
+            if (data.hasBleeding(part)) {
+                float partHP = ExodusCoreAPI.getBodyPartHP(player, part);
 
-        ExodusCoreAPI.damage(player, damage);
+                if (partHP <= 0) {
+                    // ✅ Часть уничтожена - суммируем её урон для переливания
+                    float damage = data.getBleedingDamage(part);
+                    totalOverflowDamage += damage;
+                }
+            }
+        }
 
-        // Логируем для отладки
-        if (ExodusCoreAPI.getCurrentHP(player) <= 10) {
-            System.out.println("=== LOW HP FROM BLEEDING! HP: " + ExodusCoreAPI.getCurrentHP(player) + " ===");
+        // Если есть переливающийся урон - распределяем его
+        if (totalOverflowDamage > 0) {
+            applyOverflowDamage(player, totalOverflowDamage);
         }
     }
 
     /**
-     * Перелом - сильное замедление
-     * ПОСТОЯННЫЙ ЭФФЕКТ (убирается только лечением)
+     * ✅ ПЕРЕЛИВАНИЕ урона от уничтоженных частей
+     *
+     * Урон распределяется ПОРОВНУ на все живые части тела
      */
-    private static void applyFractureDebuff(ServerPlayer player) {
-        if (!ExodusCoreAPI.hasEffect(player, StatusEffect.FRACTURE)) {
+    private static void applyOverflowDamage(ServerPlayer player, float totalDamage) {
+        // Считаем количество живых частей
+        int aliveCount = 0;
+        for (BodyPart part : BodyPart.values()) {
+            if (ExodusCoreAPI.getBodyPartHP(player, part) > 0) {
+                aliveCount++;
+            }
+        }
+
+        if (aliveCount == 0) {
+            // Все части мертвы - игрок умирает
             return;
         }
 
-        float intensity = ExodusCoreAPI.getEffectIntensity(player, StatusEffect.FRACTURE);
+        // Распределяем урон ПОРОВНУ
+        float damagePerPart = totalDamage / aliveCount;
 
-        // Сильное замедление (уровень зависит от интенсивности)
-        // 0.3-1.0 интенсивность = 1-4 уровень замедления
-        int amplifier = Math.max(0, (int) (intensity * 4));
-        player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, amplifier, false, false));
+        for (BodyPart part : BodyPart.values()) {
+            if (ExodusCoreAPI.getBodyPartHP(player, part) > 0) {
+                ExodusCoreAPI.damageBodyPart(player, part, damagePerPart);
+            }
+        }
     }
 
     /**
-     * Боль - замедление копания + лёгкое замедление движения
-     * АВТОМАТИЧЕСКИЙ ЭФФЕКТ (пока есть кровотечение или перелом)
+     * Перелом - дебафы в зависимости от части тела
      */
-    private static void applyPainDebuff(ServerPlayer player) {
-        if (!ExodusCoreAPI.hasEffect(player, StatusEffect.PAIN)) {
+    private static void applyFractureDebuffs(ServerPlayer player) {
+        PlayerHealthData data = ExodusCoreAPI.getHealthData(player);
+
+        boolean torsoFracture = data.hasFracture(BodyPart.TORSO);
+        boolean leftArmFracture = data.hasFracture(BodyPart.LEFT_ARM);
+        boolean rightArmFracture = data.hasFracture(BodyPart.RIGHT_ARM);
+        boolean leftLegFracture = data.hasFracture(BodyPart.LEFT_LEG);
+        boolean rightLegFracture = data.hasFracture(BodyPart.RIGHT_LEG);
+
+        // НОГИ - Замедление
+        if (leftLegFracture || rightLegFracture) {
+            float legIntensity = 0f;
+            if (leftLegFracture) legIntensity = Math.max(legIntensity, data.getFractureIntensity(BodyPart.LEFT_LEG));
+            if (rightLegFracture) legIntensity = Math.max(legIntensity, data.getFractureIntensity(BodyPart.RIGHT_LEG));
+
+            int amplifier = (leftLegFracture && rightLegFracture) ?
+                    Math.max(2, (int)(legIntensity * 5)) :
+                    Math.max(1, (int)(legIntensity * 3));
+
+            player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, amplifier, false, false));
+        }
+
+        // РУКИ - Mining Fatigue + Weakness
+        if (leftArmFracture || rightArmFracture) {
+            float armIntensity = 0f;
+            if (leftArmFracture) armIntensity = Math.max(armIntensity, data.getFractureIntensity(BodyPart.LEFT_ARM));
+            if (rightArmFracture) armIntensity = Math.max(armIntensity, data.getFractureIntensity(BodyPart.RIGHT_ARM));
+
+            int amplifier = (leftArmFracture && rightArmFracture) ?
+                    Math.max(2, (int)(armIntensity * 4)) :
+                    Math.max(1, (int)(armIntensity * 2));
+
+            player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 2, amplifier, false, false));
+            player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 2, 0, false, false));
+        }
+
+        // ТОРС - Hunger
+        if (torsoFracture) {
+            float torsoIntensity = data.getFractureIntensity(BodyPart.TORSO);
+            player.addEffect(new MobEffectInstance(MobEffects.HUNGER, 2, (int)(torsoIntensity * 2), false, false));
+        }
+    }
+
+    /**
+     * Боль - глобальные дебафы
+     */
+    private static void applyPainDebuffs(ServerPlayer player) {
+        if (!ExodusCoreAPI.hasPain(player)) {
             return;
         }
 
-        float intensity = ExodusCoreAPI.getEffectIntensity(player, StatusEffect.PAIN);
+        float intensity = ExodusCoreAPI.getPainIntensity(player);
 
-        // Замедление копания (Mining Fatigue)
-        // 0.3-1.0 интенсивность = 0-2 уровень
+        // Mining Fatigue
         int miningAmplifier = Math.max(0, (int) (intensity * 2));
         player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 2, miningAmplifier, false, false));
 
-        // Лёгкое замедление движения
-        int movementAmplifier = (int) (intensity * 0.5f); // 0 уровень в большинстве случаев
+        // Slowness
+        int movementAmplifier = (int) (intensity * 0.5f);
         if (movementAmplifier > 0) {
             player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, movementAmplifier, false, false));
         }
 
-        // При сильной боли (>70%) - тошнота
+        // Nausea при >70%
         if (intensity > 0.7f) {
             player.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 2, 0, false, false));
+        }
+    }
+
+    /**
+     * ✅ Дебафы от УНИЧТОЖЕННЫХ конечностей (HP = 0)
+     */
+    private static void applyDestroyedLimbsDebuffs(ServerPlayer player) {
+        boolean leftArmDestroyed = ExodusCoreAPI.getBodyPartHP(player, BodyPart.LEFT_ARM) <= 0;
+        boolean rightArmDestroyed = ExodusCoreAPI.getBodyPartHP(player, BodyPart.RIGHT_ARM) <= 0;
+        boolean leftLegDestroyed = ExodusCoreAPI.getBodyPartHP(player, BodyPart.LEFT_LEG) <= 0;
+        boolean rightLegDestroyed = ExodusCoreAPI.getBodyPartHP(player, BodyPart.RIGHT_LEG) <= 0;
+
+        // ✅ РУКИ УНИЧТОЖЕНЫ
+        if (leftArmDestroyed || rightArmDestroyed) {
+            if (leftArmDestroyed && rightArmDestroyed) {
+                // ОБЕ руки → СИЛЬНОЕ утомление
+                player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 2, 4, false, false));
+                player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 2, 2, false, false));
+            } else {
+                // ОДНА рука → среднее утомление
+                player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 2, 2, false, false));
+                player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 2, 1, false, false));
+            }
+        }
+
+        // ✅ НОГИ УНИЧТОЖЕНЫ
+        if (leftLegDestroyed || rightLegDestroyed) {
+            if (leftLegDestroyed && rightLegDestroyed) {
+                // ОБЕ ноги → СИЛЬНОЕ замедление (почти не ходить)
+                player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, 4, false, false));
+            } else {
+                // ОДНА нога → хромание (можно ходить, но медленно)
+                player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, 2, false, false));
+            }
         }
     }
 }

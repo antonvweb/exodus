@@ -1,12 +1,14 @@
 package com.exodus.core.player;
 
+import com.exodus.core.api.player.BleedingType;
+import com.exodus.core.api.player.BodyPart;
 import com.exodus.core.api.player.PlayerHealthData;
-import com.exodus.core.api.player.StatusEffect;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
 
 /**
  * Компонент здоровья игрока
+ * Система 6 частей тела
  */
 public class PlayerHealthComponent {
 
@@ -25,33 +27,67 @@ public class PlayerHealthComponent {
         return data;
     }
 
+    // ============ HP ЧАСТЕЙ ТЕЛА ============
+
     /**
-     * Нанести урон
+     * Нанести урон части тела
      */
-    public void damage(float amount) {
-        data.damage(amount);
+    public void damageBodyPart(BodyPart part, float amount) {
+        data.damageBodyPart(part, amount);
     }
 
     /**
-     * Восстановить здоровье
+     * Восстановить здоровье части тела
      */
-    public void heal(float amount) {
-        data.heal(amount);
+    public void healBodyPart(BodyPart part, float amount) {
+        data.healBodyPart(part, amount);
+    }
+
+    // ============ ЭФФЕКТЫ ============
+
+    /**
+     * Добавить кровотечение на часть тела
+     */
+    public void addBleeding(BodyPart part, BleedingType type) {
+        data.addBleeding(part, type);
     }
 
     /**
-     * Добавить статусный эффект
+     * Убрать кровотечение с части тела
      */
-    public void addEffect(StatusEffect effect, int duration, float intensity) {
-        data.addEffect(effect, duration, intensity);
+    public void removeBleeding(BodyPart part) {
+        data.removeBleeding(part);
     }
 
     /**
-     * Убрать статусный эффект
+     * Добавить перелом на часть тела
      */
-    public void removeEffect(StatusEffect effect) {
-        data.removeEffect(effect);
+    public void addFracture(BodyPart part, float intensity) {
+        data.addFracture(part, intensity);
     }
+
+    /**
+     * Убрать перелом с части тела
+     */
+    public void removeFracture(BodyPart part) {
+        data.removeFracture(part);
+    }
+
+    /**
+     * Добавить боль (глобальную)
+     */
+    public void addPain(int duration, float intensity) {
+        data.addPain(duration, intensity);
+    }
+
+    /**
+     * Убрать боль
+     */
+    public void removePain() {
+        data.removePain();
+    }
+
+    // ============ ОБНОВЛЕНИЕ ============
 
     /**
      * Обновление каждый тик
@@ -59,6 +95,8 @@ public class PlayerHealthComponent {
     public void tick() {
         data.tickEffects();
     }
+
+    // ============ NBT ============
 
     /**
      * Сохранить в NBT

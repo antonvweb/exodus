@@ -5,207 +5,506 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Данные здоровья игрока (упрощённая версия)
- * Одна полоска HP + статусные эффекты
+ * Данные здоровья игрока - система 6 частей тела
+ * Упрощённая механика смерти + переливание урона от кровотечения
  */
 public class PlayerHealthData {
 
-    // Специальное значение для бесконечной длительности (например, перелом)
+    // Специальное значение для бесконечной длительности
     public static final int INFINITE_DURATION = -1;
 
-    // ============ ПОКАЗАТЕЛИ ============
-    private float currentHP;
-    private float maxHP;
-    private float speed;
-    private float damage;
-    private float jump;
+    // ============ HP ДЛЯ КАЖДОЙ ЧАСТИ ТЕЛА ============
+    private final Map<BodyPart, Float> bodyPartHP;
 
-    // ============ СТАТУСНЫЕ ЭФФЕКТЫ ============
-    // Ключ - эффект, значение - время окончания (в тиках) или INFINITE_DURATION
-    private final Map<StatusEffect, Integer> activeEffects;
+    // ============ ЭФФЕКТЫ НА КОНКРЕТНЫЕ ЧАСТИ ТЕЛА ============
+    private final Map<BodyPart, BleedingEffect> bleedingEffects;
+    private final Map<BodyPart, FractureEffect> fractureEffects;
 
-    // Интенсивность эффектов (0.0 - 1.0)
-    private final Map<StatusEffect, Float> effectIntensity;
+    // Боль: ГЛОБАЛЬНЫЙ эффект
+    private int painDuration;
+    private float painIntensity;
 
     public PlayerHealthData() {
-        this.maxHP = 100.0f;
-        this.currentHP = maxHP;
-        this.activeEffects = new HashMap<>();
-        this.effectIntensity = new HashMap<>();
+        this.bodyPartHP = new HashMap<>();
+        this.bleedingEffects = new HashMap<>();
+        this.fractureEffects = new HashMap<>();
+
+        // Инициализируем HP для всех частей тела
+        for (BodyPart part : BodyPart.values()) {
+            bodyPartHP.put(part, part.getMaxHP());
+        }
+
+        this.painDuration = 0;
+        this.painIntensity = 0f;
     }
 
-    // ============ HP ============
+    // ============ HP ЧАСТЕЙ ТЕЛА ============
 
-    public float getCurrentHP() {
-        return currentHP;
+    public float getBodyPartHP(BodyPart part) {
+        return bodyPartHP.getOrDefault(part, 0f);
     }
 
-    public void setCurrentHP(float currentHP) {
-        this.currentHP = Math.max(0, Math.min(maxHP, currentHP));
+    public void setBodyPartHP(BodyPart part, float hp) {
+        bodyPartHP.put(part, Math.max(0, Math.min(part.getMaxHP(), hp)));
     }
 
-    public float getMaxHP() {
-        return maxHP;
+    public void damageBodyPart(BodyPart part, float damage) {
+        float currentHP = getBodyPartHP(part);
+        setBodyPartHP(part, currentHP - damage);
     }
 
-    public void setMaxHP(float maxHP) {
-        this.maxHP = maxHP;
-        this.currentHP = Math.min(currentHP, maxHP);
+    public void healBodyPart(BodyPart part, float amount) {
+        float currentHP = getBodyPartHP(part);
+        setBodyPartHP(part, currentHP + amount);
+
+        // ✅ Если вылечили торс (HP > 0) - отменяем таймер смерти
+        if (part == BodyPart.TORSO && currentHP <= 0 && getBodyPartHP(part) > 0) {
+            cancelTorsoDeathTimer();
+        }
+    }
+
+    public float getBodyPartHPPercentage(BodyPart part) {
+        float current = getBodyPartHP(part);
+        float max = part.getMaxHP();
+        return max > 0 ? Math.max(0f, Math.min(1f, current / max)) : 0f;
+    }
+
+    public BodyPart.BodyPartState getBodyPartState(BodyPart part) {
+        return part.getState(getBodyPartHPPercentage(part));
+    }
+
+    // ============ ТАЙМЕР ТОРСА (ВНУТРЕННИЙ) ============
+
+    private boolean torsoDestroyed = false;
+    private int torsoDeathTimer = 0;        // Оставшееся время (в тиках)
+    private int torsoDeathDuration = 0;     // Общая длительность таймера
+
+    /**
+     * Запустить таймер смерти торса
+     * 20-30 минут случайно
+     */
+    public void startTorsoDeathTimer() {
+        if (!torsoDestroyed) {
+            torsoDestroyed = true;
+            // 20-30 минут = 24000-36000 тиков
+            torsoDeathDuration = 24000 + (int)(Math.random() * 12000);
+            torsoDeathTimer = torsoDeathDuration;
+        }
     }
 
     /**
-     * Получить процент HP (0.0 - 1.0)
+     * Отменить таймер торса (если вылечили)
      */
-    public float getHPPercentage() {
-        if (maxHP <= 0) {
+    public void cancelTorsoDeathTimer() {
+        if (torsoDestroyed) {
+            torsoDestroyed = false;
+            torsoDeathTimer = 0;
+            torsoDeathDuration = 0;
+        }
+    }
+
+    /**
+     * Обновить таймер торса
+     */
+    public void tickTorsoDeathTimer() {
+        if (torsoDestroyed && torsoDeathTimer > 0) {
+            torsoDeathTimer--;
+        }
+    }
+
+    /**
+     * Получить шанс смерти от торса (0.0 - 1.0)
+     * Прогрессирующий шанс в последние 5 минут
+     */
+    public float getTorsoDeathChance() {
+        if (!torsoDestroyed || torsoDeathTimer > 6000) { // > 5 минут
             return 0f;
         }
-        return Math.max(0f, Math.min(1f, currentHP / maxHP));
+
+        if (torsoDeathTimer <= 0) {
+            return 1.0f; // 100% смерть
+        }
+
+        // Последние 5 минут: прогрессирующий шанс
+        // 5:00 → 1%, 4:00 → 2%, 3:00 → 5%, 2:00 → 10%, 1:00 → 20%, 0:30 → 50%
+        int secondsLeft = torsoDeathTimer / 20;
+
+        if (secondsLeft > 240) {      // 5:00-4:01
+            return 0.01f;
+        } else if (secondsLeft > 180) { // 4:00-3:01
+            return 0.02f;
+        } else if (secondsLeft > 120) { // 3:00-2:01
+            return 0.05f;
+        } else if (secondsLeft > 60) {  // 2:00-1:01
+            return 0.10f;
+        } else if (secondsLeft > 30) {  // 1:00-0:31
+            return 0.20f;
+        } else {                        // 0:30-0:00
+            return 0.50f;
+        }
     }
 
-    /**
-     * Нанести урон
-     */
-    public void damage(float amount) {
-        currentHP = Math.max(0, currentHP - amount);
+    public boolean isTorsoDestroyed() {
+        return torsoDestroyed;
     }
 
-    /**
-     * Восстановить здоровье
-     */
-    public void heal(float amount) {
-        currentHP = Math.min(maxHP, currentHP + amount);
+    public int getTorsoTimeLeft() {
+        return torsoDeathTimer / 20; // В секундах
     }
 
+    // ============ ПРОВЕРКА ЖИЗНИ ============
+
     /**
-     * Жив ли игрок
+     * Проверить жив ли игрок
+     *
+     * ПРАВИЛА СМЕРТИ:
+     * 1. Голова = 0 HP → мгновенная смерть
+     * 2. Торс = 0 HP → таймер 20-30 мин, потом прогрессирующий шанс смерти
+     * 3. ВСЕ части = 0 HP → смерть
      */
     public boolean isAlive() {
-        return currentHP > 0;
-    }
-
-    // ============ СТАТУСНЫЕ ЭФФЕКТЫ ============
-
-    /**
-     * Добавить статусный эффект
-     * @param effect эффект
-     * @param duration длительность в тиках (20 тиков = 1 секунда) или INFINITE_DURATION
-     * @param intensity интенсивность (0.0 - 1.0)
-     */
-    public void addEffect(StatusEffect effect, int duration, float intensity) {
-        activeEffects.put(effect, duration);
-        effectIntensity.put(effect, Math.max(0f, Math.min(1f, intensity)));
-    }
-
-    /**
-     * Убрать статусный эффект
-     */
-    public void removeEffect(StatusEffect effect) {
-        activeEffects.remove(effect);
-        effectIntensity.remove(effect);
-    }
-
-    /**
-     * Проверить есть ли эффект
-     */
-    public boolean hasEffect(StatusEffect effect) {
-        if (!activeEffects.containsKey(effect)) {
+        // 1. Голова = 0 → смерть
+        if (getBodyPartHP(BodyPart.HEAD) <= 0) {
             return false;
         }
 
-        int duration = activeEffects.get(effect);
-        // Бесконечный эффект всегда активен
-        return duration == INFINITE_DURATION || duration > 0;
+        // 2. Торс = 0 → проверяем таймер
+        if (torsoDestroyed && torsoDeathTimer <= 0) {
+            return false; // Таймер истёк
+        }
+
+        // 3. Все части тела = 0 → смерть
+        boolean allDestroyed = true;
+        for (BodyPart part : BodyPart.values()) {
+            if (getBodyPartHP(part) > 0) {
+                allDestroyed = false;
+                break;
+            }
+        }
+        if (allDestroyed) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
-     * Получить оставшееся время эффекта (в тиках)
-     * Возвращает INFINITE_DURATION для бесконечных эффектов
+     * Получить причину смерти
      */
-    public int getEffectDuration(StatusEffect effect) {
-        return activeEffects.getOrDefault(effect, 0);
+    public DeathCause getDeathCause() {
+        if (getBodyPartHP(BodyPart.HEAD) <= 0) {
+            return DeathCause.HEAD_DESTROYED;
+        }
+
+        if (torsoDestroyed && torsoDeathTimer <= 0) {
+            return DeathCause.TORSO_FAILURE;
+        }
+
+        boolean allDestroyed = true;
+        for (BodyPart part : BodyPart.values()) {
+            if (getBodyPartHP(part) > 0) {
+                allDestroyed = false;
+                break;
+            }
+        }
+        if (allDestroyed) {
+            return DeathCause.ALL_BODY_DESTROYED;
+        }
+
+        return DeathCause.UNKNOWN;
     }
 
-    /**
-     * Получить интенсивность эффекта (0.0 - 1.0)
-     */
-    public float getEffectIntensity(StatusEffect effect) {
-        return effectIntensity.getOrDefault(effect, 0f);
+    public enum DeathCause {
+        HEAD_DESTROYED,        // Голова уничтожена
+        TORSO_FAILURE,         // Отказ внутренних органов (таймер торса)
+        ALL_BODY_DESTROYED,    // Все части уничтожены
+        BLEEDING,              // Истёк кровью
+        EXPLOSION,             // Сильный взрыв в упор
+        FALL,                  // Падение с большой высоты
+        UNKNOWN                // Неизвестная причина
     }
 
-    /**
-     * Получить все активные эффекты
-     */
-    public Map<StatusEffect, Integer> getActiveEffects() {
-        return new HashMap<>(activeEffects);
+    // ============ КРОВОТЕЧЕНИЕ ============
+
+    public void addBleeding(BodyPart part, BleedingType type) {
+        // ✅ Голова НЕ МОЖЕТ кровоточить
+        if (part == BodyPart.HEAD) {
+            return;
+        }
+
+        int duration;
+        if (type.isInfinite()) {
+            duration = INFINITE_DURATION; // Бесконечное
+        } else {
+            duration = type.getRandomDuration() * 20; // Секунды → тики
+        }
+
+        float damage = type.getRandomDamage();
+
+        bleedingEffects.put(part, new BleedingEffect(duration, type, damage));
+
+        if (type.causesPain()) {
+            // Для бесконечного кровотечения - бесконечная боль
+            if (type.isInfinite()) {
+                addPain(INFINITE_DURATION, 0.6f);
+            } else {
+                addPain(duration, 0.6f);
+            }
+        }
     }
 
-    /**
-     * Обновить эффекты (вызывается каждый тик)
-     */
+    public void removeBleeding(BodyPart part) {
+        BleedingEffect effect = bleedingEffects.remove(part);
+
+        if (effect != null && effect.type.causesPain()) {
+            int painAfter = effect.type.getPainDurationAfter() * 20;
+            addPain(painAfter, 0.4f);
+        }
+    }
+
+    public boolean hasBleeding(BodyPart part) {
+        BleedingEffect effect = bleedingEffects.get(part);
+        if (effect == null) {
+            return false;
+        }
+        // Бесконечное или ещё не кончилось
+        return effect.duration == INFINITE_DURATION || effect.duration > 0;
+    }
+
+    public BleedingType getBleedingType(BodyPart part) {
+        BleedingEffect effect = bleedingEffects.get(part);
+        return effect != null ? effect.type : null;
+    }
+
+    public float getBleedingDamage(BodyPart part) {
+        BleedingEffect effect = bleedingEffects.get(part);
+        return effect != null ? effect.damagePerSecond : 0f;
+    }
+
+    // ============ ПЕРЕЛОМ ============
+
+    public void addFracture(BodyPart part, float intensity) {
+        // ✅ Голова НЕ МОЖЕТ иметь перелом
+        if (part == BodyPart.HEAD) {
+            return;
+        }
+
+        fractureEffects.put(part, new FractureEffect(INFINITE_DURATION, intensity));
+        addPain(INFINITE_DURATION, intensity * 0.8f);
+    }
+
+    public void removeFracture(BodyPart part) {
+        FractureEffect effect = fractureEffects.remove(part);
+
+        if (effect != null) {
+            int painAfter = (120 + (int)(Math.random() * 60)) * 20;
+            addPain(painAfter, 0.5f);
+        }
+    }
+
+    public boolean hasFracture(BodyPart part) {
+        FractureEffect effect = fractureEffects.get(part);
+        return effect != null && (effect.duration == INFINITE_DURATION || effect.duration > 0);
+    }
+
+    public float getFractureIntensity(BodyPart part) {
+        FractureEffect effect = fractureEffects.get(part);
+        return effect != null ? effect.intensity : 0f;
+    }
+
+    // ============ БОЛЬ ============
+
+    public void addPain(int duration, float intensity) {
+        if (intensity > this.painIntensity) {
+            this.painIntensity = intensity;
+        }
+
+        if (duration == INFINITE_DURATION) {
+            this.painDuration = INFINITE_DURATION;
+        } else if (this.painDuration != INFINITE_DURATION) {
+            this.painDuration = Math.max(this.painDuration, duration);
+        }
+    }
+
+    public void removePain() {
+        this.painDuration = 0;
+        this.painIntensity = 0f;
+    }
+
+    public boolean hasPain() {
+        return painDuration > 0 || painDuration == INFINITE_DURATION;
+    }
+
+    public float getPainIntensity() {
+        return painIntensity;
+    }
+
+    // ============ ОБНОВЛЕНИЕ ЭФФЕКТОВ ============
+
     public void tickEffects() {
-        // Уменьшаем таймеры (кроме бесконечных)
-        activeEffects.entrySet().removeIf(entry -> {
-            int duration = entry.getValue();
+        // Обновляем кровотечения
+        bleedingEffects.entrySet().removeIf(entry -> {
+            BleedingEffect effect = entry.getValue();
 
-            // Бесконечные эффекты не уменьшаем
-            if (duration == INFINITE_DURATION) {
+            // Бесконечное кровотечение не тикается
+            if (effect.duration == INFINITE_DURATION) {
                 return false;
             }
 
-            int newDuration = duration - 1;
-            if (newDuration <= 0) {
-                effectIntensity.remove(entry.getKey());
+            effect.duration--;
+
+            if (effect.duration <= 0) {
+                BodyPart part = entry.getKey();
+                if (effect.type.causesPain()) {
+                    int painAfter = effect.type.getPainDurationAfter() * 20;
+                    addPain(painAfter, 0.4f);
+                }
                 return true;
             }
-            entry.setValue(newDuration);
             return false;
         });
+
+        // Тикаем боль
+        if (painDuration > 0 && painDuration != INFINITE_DURATION) {
+            painDuration--;
+            if (painDuration <= 0) {
+                painIntensity = 0f;
+            }
+        }
+
+        // ✅ Тикаем таймер торса
+        tickTorsoDeathTimer();
     }
 
-    // ============ NBT СОХРАНЕНИЕ/ЗАГРУЗКА ============
+    // ============ ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ ============
+
+    private static class BleedingEffect {
+        int duration;           // В тиках, INFINITE_DURATION = бесконечное
+        BleedingType type;
+        float damagePerSecond;
+
+        BleedingEffect(int duration, BleedingType type, float damagePerSecond) {
+            this.duration = duration;
+            this.type = type;
+            this.damagePerSecond = damagePerSecond;
+        }
+    }
+
+    private static class FractureEffect {
+        int duration;      // INFINITE_DURATION
+        float intensity;   // 0.0 - 1.0
+
+        FractureEffect(int duration, float intensity) {
+            this.duration = duration;
+            this.intensity = intensity;
+        }
+    }
+
+    // ============ NBT ============
 
     public CompoundTag writeNbt(CompoundTag nbt) {
-        nbt.putFloat("currentHP", currentHP);
-        nbt.putFloat("maxHP", maxHP);
-
-        // Сохраняем эффекты
-        CompoundTag effectsNbt = new CompoundTag();
-        for (Map.Entry<StatusEffect, Integer> entry : activeEffects.entrySet()) {
-            CompoundTag effectNbt = new CompoundTag();
-            effectNbt.putInt("duration", entry.getValue());
-            effectNbt.putFloat("intensity", effectIntensity.getOrDefault(entry.getKey(), 0f));
-            effectsNbt.put(entry.getKey().getId(), effectNbt);
+        // HP частей тела
+        CompoundTag bodyPartsNbt = new CompoundTag();
+        for (BodyPart part : BodyPart.values()) {
+            bodyPartsNbt.putFloat(part.getId(), getBodyPartHP(part));
         }
-        nbt.put("effects", effectsNbt);
+        nbt.put("bodyParts", bodyPartsNbt);
+
+        // Кровотечения
+        CompoundTag bleedingsNbt = new CompoundTag();
+        for (Map.Entry<BodyPart, BleedingEffect> entry : bleedingEffects.entrySet()) {
+            CompoundTag effectNbt = new CompoundTag();
+            effectNbt.putInt("duration", entry.getValue().duration);
+            effectNbt.putString("type", entry.getValue().type.getId());
+            effectNbt.putFloat("damage", entry.getValue().damagePerSecond);
+            bleedingsNbt.put(entry.getKey().getId(), effectNbt);
+        }
+        nbt.put("bleedings", bleedingsNbt);
+
+        // Переломы
+        CompoundTag fracturesNbt = new CompoundTag();
+        for (Map.Entry<BodyPart, FractureEffect> entry : fractureEffects.entrySet()) {
+            CompoundTag effectNbt = new CompoundTag();
+            effectNbt.putInt("duration", entry.getValue().duration);
+            effectNbt.putFloat("intensity", entry.getValue().intensity);
+            fracturesNbt.put(entry.getKey().getId(), effectNbt);
+        }
+        nbt.put("fractures", fracturesNbt);
+
+        // Боль
+        nbt.putInt("painDuration", painDuration);
+        nbt.putFloat("painIntensity", painIntensity);
+
+        // ✅ Таймер торса
+        nbt.putBoolean("torsoDestroyed", torsoDestroyed);
+        nbt.putInt("torsoDeathTimer", torsoDeathTimer);
+        nbt.putInt("torsoDeathDuration", torsoDeathDuration);
 
         return nbt;
     }
 
     public void readNbt(CompoundTag nbt) {
-        if (nbt.contains("currentHP")) {
-            this.currentHP = nbt.getFloat("currentHP");
-        }
-        if (nbt.contains("maxHP")) {
-            this.maxHP = nbt.getFloat("maxHP");
+        // HP частей тела
+        if (nbt.contains("bodyParts")) {
+            CompoundTag bodyPartsNbt = nbt.getCompound("bodyParts");
+            for (BodyPart part : BodyPart.values()) {
+                if (bodyPartsNbt.contains(part.getId())) {
+                    bodyPartHP.put(part, bodyPartsNbt.getFloat(part.getId()));
+                }
+            }
         }
 
-        // Загружаем эффекты
-        if (nbt.contains("effects")) {
-            CompoundTag effectsNbt = nbt.getCompound("effects");
-            activeEffects.clear();
-            effectIntensity.clear();
+        // Кровотечения
+        if (nbt.contains("bleedings")) {
+            CompoundTag bleedingsNbt = nbt.getCompound("bleedings");
+            bleedingEffects.clear();
 
-            for (StatusEffect effect : StatusEffect.values()) {
-                if (effectsNbt.contains(effect.getId())) {
-                    CompoundTag effectNbt = effectsNbt.getCompound(effect.getId());
+            for (BodyPart part : BodyPart.values()) {
+                if (bleedingsNbt.contains(part.getId())) {
+                    CompoundTag effectNbt = bleedingsNbt.getCompound(part.getId());
+                    int duration = effectNbt.getInt("duration");
+                    String typeId = effectNbt.getString("type");
+                    float damage = effectNbt.getFloat("damage");
+
+                    BleedingType type = BleedingType.valueOf(typeId.toUpperCase());
+                    bleedingEffects.put(part, new BleedingEffect(duration, type, damage));
+                }
+            }
+        }
+
+        // Переломы
+        if (nbt.contains("fractures")) {
+            CompoundTag fracturesNbt = nbt.getCompound("fractures");
+            fractureEffects.clear();
+
+            for (BodyPart part : BodyPart.values()) {
+                if (fracturesNbt.contains(part.getId())) {
+                    CompoundTag effectNbt = fracturesNbt.getCompound(part.getId());
                     int duration = effectNbt.getInt("duration");
                     float intensity = effectNbt.getFloat("intensity");
 
-                    activeEffects.put(effect, duration);
-                    effectIntensity.put(effect, intensity);
+                    fractureEffects.put(part, new FractureEffect(duration, intensity));
                 }
             }
+        }
+
+        // Боль
+        if (nbt.contains("painDuration")) {
+            painDuration = nbt.getInt("painDuration");
+        }
+        if (nbt.contains("painIntensity")) {
+            painIntensity = nbt.getFloat("painIntensity");
+        }
+
+        // ✅ Таймер торса
+        if (nbt.contains("torsoDestroyed")) {
+            torsoDestroyed = nbt.getBoolean("torsoDestroyed");
+        }
+        if (nbt.contains("torsoDeathTimer")) {
+            torsoDeathTimer = nbt.getInt("torsoDeathTimer");
+        }
+        if (nbt.contains("torsoDeathDuration")) {
+            torsoDeathDuration = nbt.getInt("torsoDeathDuration");
         }
     }
 }

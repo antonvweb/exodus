@@ -1,6 +1,6 @@
 package com.exodus.core.player;
 
-import com.exodus.core.api.player.StatusEffect;
+import com.exodus.core.api.player.BodyPart;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
@@ -11,6 +11,7 @@ import java.util.UUID;
 
 /**
  * Менеджер компонентов здоровья игроков
+ * Система 6 частей тела
  */
 public class PlayerHealthManager {
 
@@ -37,20 +38,32 @@ public class PlayerHealthManager {
      * Регистрация событий
      */
     public static void registerEvents() {
-        // При респавне - полное восстановление HP
+        // При респавне - полное восстановление HP всех частей тела
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
             if (!alive) { // Игрок умер и респавнился
                 PlayerHealthComponent component = getComponent(newPlayer);
 
-                // Восстанавливаем HP
-                component.getData().setCurrentHP(component.getData().getMaxHP());
-
-                // ✅ Убираем ВСЕ эффекты (включая бесконечные переломы)
-                for (StatusEffect effect : StatusEffect.values()) {
-                    component.removeEffect(effect);
+                // ✅ Восстанавливаем HP всех частей тела
+                for (BodyPart part : BodyPart.values()) {
+                    component.getData().setBodyPartHP(part, part.getMaxHP());
                 }
 
-                System.out.println("=== PLAYER RESPAWNED: All effects cleared, HP restored ===");
+                // ✅ Убираем ВСЕ кровотечения
+                for (BodyPart part : BodyPart.values()) {
+                    if (component.getData().hasBleeding(part)) {
+                        component.removeBleeding(part);
+                    }
+                }
+
+                // ✅ Убираем ВСЕ переломы (включая бесконечные)
+                for (BodyPart part : BodyPart.values()) {
+                    if (component.getData().hasFracture(part)) {
+                        component.removeFracture(part);
+                    }
+                }
+
+                // ✅ Убираем боль
+                component.removePain();
             }
         });
 
@@ -62,8 +75,6 @@ public class PlayerHealthManager {
             CompoundTag nbt = new CompoundTag();
             oldComp.writeNbt(nbt);
             newComp.readNbt(nbt);
-
-            System.out.println("=== PLAYER DIMENSION CHANGE: Data copied ===");
         });
     }
 }

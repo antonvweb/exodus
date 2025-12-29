@@ -1,17 +1,19 @@
 package com.exodus.core;
 
+import com.exodus.core.api.player.BleedingType;
+import com.exodus.core.api.player.BodyPart;
 import com.exodus.core.api.player.PlayerHealthData;
-import com.exodus.core.api.player.StatusEffect;
 import com.exodus.core.player.PlayerHealthComponent;
 import com.exodus.core.player.PlayerHealthManager;
 import net.minecraft.world.entity.player.Player;
 
 /**
  * Главный API класс для Exodus Core
+ * Система 6 частей тела
  */
 public class ExodusCoreAPI {
 
-    // ==================== ЗДОРОВЬЕ ====================
+    // ==================== КОМПОНЕНТ ЗДОРОВЬЯ ====================
 
     /**
      * Получить компонент здоровья игрока
@@ -27,32 +29,48 @@ public class ExodusCoreAPI {
         return getHealthComponent(player).getData();
     }
 
+    // ==================== HP ЧАСТЕЙ ТЕЛА ====================
+
     /**
-     * Получить текущее HP
+     * Получить HP части тела
      */
-    public static float getCurrentHP(Player player) {
-        return getHealthData(player).getCurrentHP();
+    public static float getBodyPartHP(Player player, BodyPart part) {
+        return getHealthData(player).getBodyPartHP(part);
     }
 
     /**
-     * Получить максимальное HP
+     * Установить HP части тела
      */
-    public static float getMaxHP(Player player) {
-        return getHealthData(player).getMaxHP();
+    public static void setBodyPartHP(Player player, BodyPart part, float hp) {
+        getHealthData(player).setBodyPartHP(part, hp);
     }
 
     /**
-     * Нанести урон
+     * Нанести урон части тела
      */
-    public static void damage(Player player, float amount) {
-        getHealthComponent(player).damage(amount);
+    public static void damageBodyPart(Player player, BodyPart part, float damage) {
+        getHealthData(player).damageBodyPart(part, damage);
     }
 
     /**
-     * Восстановить здоровье
+     * Восстановить HP части тела
      */
-    public static void heal(Player player, float amount) {
-        getHealthComponent(player).heal(amount);
+    public static void healBodyPart(Player player, BodyPart part, float amount) {
+        getHealthData(player).healBodyPart(part, amount);
+    }
+
+    /**
+     * Получить процент HP части тела
+     */
+    public static float getBodyPartHPPercentage(Player player, BodyPart part) {
+        return getHealthData(player).getBodyPartHPPercentage(part);
+    }
+
+    /**
+     * Получить состояние части тела
+     */
+    public static BodyPart.BodyPartState getBodyPartState(Player player, BodyPart part) {
+        return getHealthData(player).getBodyPartState(part);
     }
 
     /**
@@ -62,36 +80,93 @@ public class ExodusCoreAPI {
         return getHealthData(player).isAlive();
     }
 
-    // ==================== СТАТУСНЫЕ ЭФФЕКТЫ ====================
+    // ==================== КРОВОТЕЧЕНИЕ ====================
 
     /**
-     * Добавить статусный эффект
-     * @param effect эффект
-     * @param duration длительность в секундах
-     * @param intensity интенсивность (0.0 - 1.0)
+     * Добавить кровотечение на часть тела
      */
-    public static void addEffect(Player player, StatusEffect effect, int duration, float intensity) {
-        getHealthComponent(player).addEffect(effect, duration * 20, intensity);
+    public static void addBleeding(Player player, BodyPart part, BleedingType type) {
+        getHealthData(player).addBleeding(part, type);
     }
 
     /**
-     * Убрать статусный эффект
+     * Убрать кровотечение с части тела
      */
-    public static void removeEffect(Player player, StatusEffect effect) {
-        getHealthComponent(player).removeEffect(effect);
+    public static void removeBleeding(Player player, BodyPart part) {
+        getHealthData(player).removeBleeding(part);
     }
 
     /**
-     * Проверить есть ли эффект
+     * Проверить есть ли кровотечение на части тела
      */
-    public static boolean hasEffect(Player player, StatusEffect effect) {
-        return getHealthData(player).hasEffect(effect);
+    public static boolean hasBleeding(Player player, BodyPart part) {
+        return getHealthData(player).hasBleeding(part);
     }
 
     /**
-     * Получить интенсивность эффекта
+     * Получить тип кровотечения
      */
-    public static float getEffectIntensity(Player player, StatusEffect effect) {
-        return getHealthData(player).getEffectIntensity(effect);
+    public static BleedingType getBleedingType(Player player, BodyPart part) {
+        return getHealthData(player).getBleedingType(part);
+    }
+
+    // ==================== ПЕРЕЛОМ ====================
+
+    /**
+     * Добавить перелом на часть тела (БЕСКОНЕЧНЫЙ)
+     */
+    public static void addFracture(Player player, BodyPart part, float intensity) {
+        getHealthData(player).addFracture(part, intensity);
+    }
+
+    /**
+     * Убрать перелом с части тела
+     */
+    public static void removeFracture(Player player, BodyPart part) {
+        getHealthData(player).removeFracture(part);
+    }
+
+    /**
+     * Проверить есть ли перелом на части тела
+     */
+    public static boolean hasFracture(Player player, BodyPart part) {
+        return getHealthData(player).hasFracture(part);
+    }
+
+    /**
+     * Получить интенсивность перелома
+     */
+    public static float getFractureIntensity(Player player, BodyPart part) {
+        return getHealthData(player).getFractureIntensity(part);
+    }
+
+    // ==================== БОЛЬ (ГЛОБАЛЬНАЯ) ====================
+
+    /**
+     * Добавить боль
+     */
+    public static void addPain(Player player, int duration, float intensity) {
+        getHealthData(player).addPain(duration, intensity);
+    }
+
+    /**
+     * Убрать боль
+     */
+    public static void removePain(Player player) {
+        getHealthData(player).removePain();
+    }
+
+    /**
+     * Проверить есть ли боль
+     */
+    public static boolean hasPain(Player player) {
+        return getHealthData(player).hasPain();
+    }
+
+    /**
+     * Получить интенсивность боли
+     */
+    public static float getPainIntensity(Player player) {
+        return getHealthData(player).getPainIntensity();
     }
 }
