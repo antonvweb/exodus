@@ -1,4 +1,4 @@
-package com.exodus.core.player;
+package com.exodus.core.player.stats;
 
 import com.exodus.core.api.player.PlayerStatsData;
 import net.minecraft.nbt.CompoundTag;

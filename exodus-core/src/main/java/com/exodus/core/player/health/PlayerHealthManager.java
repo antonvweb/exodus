@@ -1,4 +1,4 @@
-package com.exodus.core.player;
+package com.exodus.core.player.health;
 
 import com.exodus.core.api.player.BodyPart;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
@@ -14,53 +14,7 @@ import java.util.UUID;
  * Управляет: здоровьем, статами, витальными показателями
  */
 public class PlayerHealthManager {
-    private static final Map<UUID, PlayerStatsComponent> statsComponents = new HashMap<>();
     private static final Map<UUID, PlayerHealthComponent> components = new HashMap<>();
-    private static final Map<UUID, PlayerVitalsComponent> vitalsComponents = new HashMap<>();
-
-    // ============ СТАТЫ ============
-
-    /**
-     * Получить компонент статов игрока (создаёт если не существует)
-     */
-    public static PlayerStatsComponent getStatsComponent(Player player) {
-        return statsComponents.computeIfAbsent(
-                player.getUUID(),
-                uuid -> new PlayerStatsComponent(player)
-        );
-    }
-
-    /**
-     * Удалить компонент статов игрока
-     */
-    public static void removeStatsComponent(UUID uuid) {
-        statsComponents.remove(uuid);
-    }
-
-    // ============ ВИТАЛЬНЫЕ ПОКАЗАТЕЛИ ============
-
-    /**
-     * Получить компонент витальных показателей игрока (создаёт если не существует)
-     */
-    public static PlayerVitalsComponent getVitalsComponent(Player player) {
-        return vitalsComponents.computeIfAbsent(
-                player.getUUID(),
-                uuid -> {
-                    PlayerVitalsComponent vitals = new PlayerVitalsComponent(player);
-                    // Обновляем максимумы на основе статов
-                    vitals.updateMaxValues(getStatsComponent(player));
-                    return vitals;
-                }
-        );
-    }
-
-    /**
-     * Удалить компонент витальных показателей игрока
-     */
-    public static void removeVitalsComponent(UUID uuid) {
-        vitalsComponents.remove(uuid);
-    }
-
     // ============ ЗДОРОВЬЕ ============
 
     /**
@@ -90,7 +44,6 @@ public class PlayerHealthManager {
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
             if (!alive) { // Игрок умер и респавнился
                 PlayerHealthComponent healthComp = getComponent(newPlayer);
-                PlayerVitalsComponent vitalsComp = getVitalsComponent(newPlayer);
 
                 // ✅ Восстанавливаем HP всех частей тела
                 for (BodyPart part : BodyPart.values()) {
@@ -114,14 +67,6 @@ public class PlayerHealthManager {
                 // ✅ Убираем боль
                 healthComp.getData().removePain();
 
-                // ✅ Восстанавливаем витальные показатели
-                vitalsComp.getData().setHunger(100.0f);
-                vitalsComp.getData().setThirst(100.0f);
-                vitalsComp.getData().setEnergy(vitalsComp.getData().getMaxEnergy());
-                vitalsComp.getData().setOxygen(vitalsComp.getData().getMaxOxygen());
-                vitalsComp.getData().setTemperature(37.0f);
-                vitalsComp.getData().setMental(100.0f);
-
                 // ✅ Статы сохраняются после смерти (не сбрасываются)
             }
         });
@@ -135,22 +80,6 @@ public class PlayerHealthManager {
             CompoundTag healthNbt = new CompoundTag();
             oldHealthComp.writeNbt(healthNbt);
             newHealthComp.readNbt(healthNbt);
-
-            // ✅ Копируем статы
-            PlayerStatsComponent oldStatsComp = getStatsComponent(oldPlayer);
-            PlayerStatsComponent newStatsComp = getStatsComponent(newPlayer);
-
-            CompoundTag statsNbt = new CompoundTag();
-            oldStatsComp.writeNbt(statsNbt);
-            newStatsComp.readNbt(statsNbt);
-
-            // ✅ Копируем витальные показатели
-            PlayerVitalsComponent oldVitalsComp = getVitalsComponent(oldPlayer);
-            PlayerVitalsComponent newVitalsComp = getVitalsComponent(newPlayer);
-
-            CompoundTag vitalsNbt = new CompoundTag();
-            oldVitalsComp.writeNbt(vitalsNbt);
-            newVitalsComp.readNbt(vitalsNbt);
         });
     }
 }

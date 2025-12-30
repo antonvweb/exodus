@@ -1,4 +1,4 @@
-package com.exodus.core.player;
+package com.exodus.core.player.health;
 
 import com.exodus.core.api.player.PlayerHealthData;
 import net.minecraft.nbt.CompoundTag;

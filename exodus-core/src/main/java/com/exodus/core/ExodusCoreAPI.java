@@ -1,10 +1,10 @@
 package com.exodus.core;
 
 import com.exodus.core.api.player.*;
-import com.exodus.core.player.PlayerHealthComponent;
-import com.exodus.core.player.PlayerHealthManager;
-import com.exodus.core.player.PlayerStatsComponent;
-import com.exodus.core.player.PlayerVitalsComponent;
+import com.exodus.core.player.health.PlayerHealthComponent;
+import com.exodus.core.player.health.PlayerHealthManager;
+import com.exodus.core.player.stats.PlayerStatsManager;
+import com.exodus.core.player.vitals.PlayerVitalsManager;
 import net.minecraft.world.entity.player.Player;
 
 /**
@@ -173,40 +173,24 @@ public class ExodusCoreAPI {
     // ==================== КОМПОНЕНТ СТАТОВ ====================
 
     /**
-     * Получить компонент статов игрока
-     */
-    public static PlayerStatsComponent getStatsComponent(Player player) {
-        return PlayerHealthManager.getStatsComponent(player);
-    }
-
-    /**
      * Получить данные статов игрока
      */
-    public static PlayerStatsData getStatsData(Player player) {
-        return getStatsComponent(player).getData();
-    }
-
-    // ==================== СТАТЫ ====================
-
-    /**
-     * Получить значение стата
-     */
     public static int getStat(Player player, StatType stat) {
-        return getStatsData(player).getStat(stat);
+        return PlayerStatsManager.getStat(player, stat);
     }
 
     /**
      * Установить значение стата
      */
     public static void setStat(Player player, StatType stat, int value) {
-        getStatsData(player).setStat(stat, value);
+        PlayerStatsManager.setStat(player, stat, value);
     }
 
     /**
      * Увеличить стат на 1
      */
     public static boolean increaseStat(Player player, StatType stat) {
-        return getStatsData(player).increaseStat(stat);
+        return PlayerStatsManager.increaseStat(player, stat);
     }
 
     // ==================== УРОВЕНЬ И ОПЫТ ====================
@@ -215,146 +199,49 @@ public class ExodusCoreAPI {
      * Получить уровень игрока
      */
     public static int getLevel(Player player) {
-        return getStatsData(player).getLevel();
-    }
-
-    /**
-     * Установить уровень игрока
-     */
-    public static void setLevel(Player player, int level) {
-        getStatsData(player).setLevel(level);
+        return PlayerStatsManager.getLevel(player);
     }
 
     /**
      * Получить текущий опыт
      */
     public static float getExperience(Player player) {
-        return getStatsData(player).getExperience();
+        return PlayerStatsManager.getExperience(player);
     }
 
     /**
      * Добавить опыт (с учётом бонуса от интеллекта)
      */
     public static void addExperience(Player player, float amount) {
-        getStatsData(player).addExperience(amount);
+        PlayerStatsManager.addExperience(player, amount);
     }
 
     /**
      * Получить свободные очки статов
      */
     public static int getFreePoints(Player player) {
-        return getStatsData(player).getFreePoints();
+        return PlayerStatsManager.getFreePoints(player);
     }
-
-    // ==================== ПРОИЗВОДНЫЕ ПАРАМЕТРЫ ОТ СТАТОВ ====================
-
-    /**
-     * Получить модификатор урона ближнего боя
-     */
-    public static float getMeleeDamageModifier(Player player) {
-        return getStatsData(player).getMeleeDamageModifier();
-    }
-
-    /**
-     * Получить переносимый вес
-     */
-    public static float getCarryWeight(Player player) {
-        return getStatsData(player).getCarryWeight();
-    }
-
-    /**
-     * Получить модификатор максимального HP
-     */
-    public static float getMaxHPModifier(Player player) {
-        return getStatsData(player).getMaxHPModifier();
-    }
-
-    /**
-     * Получить максимальную стамину
-     */
-    public static float getMaxStamina(Player player) {
-        return getStatsData(player).getMaxStamina();
-    }
-
-    /**
-     * Получить эффективность лечения
-     */
-    public static float getHealingEfficiency(Player player) {
-        return getStatsData(player).getHealingEfficiency();
-    }
-
-    /**
-     * Получить критический шанс
-     */
-    public static float getTotalCritChance(Player player) {
-        return getStatsData(player).getTotalCritChance();
-    }
-
-    /**
-     * Получить точность
-     */
-    public static float getTotalAccuracy(Player player) {
-        return getStatsData(player).getTotalAccuracy();
-    }
-
-    /**
-     * Получить уклонение
-     */
-    public static float getTotalEvasion(Player player) {
-        return getStatsData(player).getTotalEvasion();
-    }
-
-    /**
-     * Получить сопротивление кровотечению
-     */
-    public static float getTotalBleedResistance(Player player) {
-        return getStatsData(player).getTotalBleedResistance();
-    }
-
-    /**
-     * Получить сопротивление переломам
-     */
-    public static float getTotalFractureResistance(Player player) {
-        return getStatsData(player).getTotalFractureResistance();
-    }
-
-    // ==================== КОМПОНЕНТ ВИТАЛЬНЫХ ПОКАЗАТЕЛЕЙ ====================
-
-    /**
-     * Получить компонент витальных показателей игрока
-     */
-    public static PlayerVitalsComponent getVitalsComponent(Player player) {
-        return PlayerHealthManager.getVitalsComponent(player);
-    }
-
-    /**
-     * Получить данные витальных показателей игрока
-     */
-    public static PlayerVitalsData getVitalsData(Player player) {
-        return getVitalsComponent(player).getData();
-    }
-
-    // ==================== СЫТОСТЬ ====================
 
     /**
      * Получить сытость
      */
     public static float getHunger(Player player) {
-        return getVitalsData(player).getHunger();
+        return PlayerVitalsManager.getHunger(player);
     }
 
     /**
      * Установить сытость
      */
     public static void setHunger(Player player, float value) {
-        getVitalsData(player).setHunger(value);
+        PlayerVitalsManager.setHunger(player, value);
     }
 
     /**
      * Добавить/убавить сытость
      */
     public static void addHunger(Player player, float amount) {
-        getVitalsData(player).addHunger(amount);
+        PlayerVitalsManager.addHunger(player, amount);
     }
 
     // ==================== ЖАЖДА ====================
@@ -363,21 +250,21 @@ public class ExodusCoreAPI {
      * Получить жажду
      */
     public static float getThirst(Player player) {
-        return getVitalsData(player).getThirst();
+        return PlayerVitalsManager.getThirst(player);
     }
 
     /**
      * Установить жажду
      */
     public static void setThirst(Player player, float value) {
-        getVitalsData(player).setThirst(value);
+        PlayerVitalsManager.setThirst(player, value);
     }
 
     /**
      * Добавить/убавить жажду
      */
     public static void addThirst(Player player, float amount) {
-        getVitalsData(player).addThirst(amount);
+        PlayerVitalsManager.addThirst(player, amount);
     }
 
     // ==================== ЭНЕРГИЯ/СТАМИНА ====================
@@ -386,42 +273,42 @@ public class ExodusCoreAPI {
      * Получить энергию
      */
     public static float getEnergy(Player player) {
-        return getVitalsData(player).getEnergy();
+        return PlayerVitalsManager.getEnergy(player);
     }
 
     /**
      * Установить энергию
      */
     public static void setEnergy(Player player, float value) {
-        getVitalsData(player).setEnergy(value);
+        PlayerVitalsManager.setEnergy(player, value);
     }
 
     /**
      * Добавить/убавить энергию
      */
     public static void addEnergy(Player player, float amount) {
-        getVitalsData(player).addEnergy(amount);
+        PlayerVitalsManager.addEnergy(player, amount);
     }
 
     /**
      * Получить максимальную энергию
      */
     public static float getMaxEnergy(Player player) {
-        return getVitalsData(player).getMaxEnergy();
+        return PlayerVitalsManager.getMaxEnergy(player);
     }
 
     /**
      * Можно ли выполнить действие (хватает ли энергии)
      */
     public static boolean canPerformAction(Player player, float cost) {
-        return getVitalsData(player).canPerformAction(cost);
+        return PlayerVitalsManager.canPerformAction(player, cost);
     }
 
     /**
      * Потратить энергию на действие
      */
     public static boolean consumeEnergy(Player player, float cost) {
-        return getVitalsData(player).consumeEnergy(cost);
+        return PlayerVitalsManager.consumeEnergy(player, cost);
     }
 
     // ==================== КИСЛОРОД ====================
@@ -430,28 +317,28 @@ public class ExodusCoreAPI {
      * Получить кислород
      */
     public static float getOxygen(Player player) {
-        return getVitalsData(player).getOxygen();
+        return PlayerVitalsManager.getOxygen(player);
     }
 
     /**
      * Установить кислород
      */
     public static void setOxygen(Player player, float value) {
-        getVitalsData(player).setOxygen(value);
+        PlayerVitalsManager.setOxygen(player, value);
     }
 
     /**
      * Добавить/убавить кислород
      */
     public static void addOxygen(Player player, float amount) {
-        getVitalsData(player).addOxygen(amount);
+        PlayerVitalsManager.addOxygen(player ,amount);
     }
 
     /**
      * Получить максимальный кислород
      */
     public static float getMaxOxygen(Player player) {
-        return getVitalsData(player).getMaxOxygen();
+        return PlayerVitalsManager.getMaxOxygen(player);
     }
 
     // ==================== ТЕМПЕРАТУРА ====================
@@ -460,21 +347,21 @@ public class ExodusCoreAPI {
      * Получить температуру тела
      */
     public static float getTemperature(Player player) {
-        return getVitalsData(player).getTemperature();
+        return PlayerVitalsManager.getTemperature(player);
     }
 
     /**
      * Установить температуру тела
      */
     public static void setTemperature(Player player, float value) {
-        getVitalsData(player).setTemperature(value);
+        PlayerVitalsManager.setTemperature(player, value);
     }
 
     /**
      * Добавить/убавить температуру
      */
     public static void addTemperature(Player player, float amount) {
-        getVitalsData(player).addTemperature(amount);
+        PlayerVitalsManager.addTemperature(player, amount);
     }
 
     // ==================== ПСИХИКА ====================
@@ -483,57 +370,20 @@ public class ExodusCoreAPI {
      * Получить психику/рассудок
      */
     public static float getMental(Player player) {
-        return getVitalsData(player).getMental();
+        return PlayerVitalsManager.getMental(player);
     }
 
     /**
      * Установить психику
      */
     public static void setMental(Player player, float value) {
-        getVitalsData(player).setMental(value);
+        PlayerVitalsManager.setMental(player, value);
     }
 
     /**
      * Добавить/убавить психику
      */
     public static void addMental(Player player, float amount) {
-        getVitalsData(player).addMental(amount);
-    }
-
-    /**
-     * Получить состояние психики
-     */
-    public static PlayerVitalsData.MentalState getMentalState(Player player) {
-        return getVitalsData(player).getMentalState();
-    }
-
-    // ==================== ОБЩИЕ МЕТОДЫ ДЛЯ ВИТАЛОВ ====================
-
-    /**
-     * Получить значение витального показателя
-     */
-    public static float getVital(Player player, VitalType type) {
-        return getVitalsData(player).getVital(type);
-    }
-
-    /**
-     * Установить значение витального показателя
-     */
-    public static void setVital(Player player, VitalType type, float value) {
-        getVitalsData(player).setVital(type, value);
-    }
-
-    /**
-     * Получить максимальное значение витального показателя
-     */
-    public static float getMaxVital(Player player, VitalType type) {
-        return getVitalsData(player).getMaxVital(type);
-    }
-
-    /**
-     * Получить процент витального показателя
-     */
-    public static float getVitalPercentage(Player player, VitalType type) {
-        return getVitalsData(player).getVitalPercentage(type);
+        PlayerVitalsManager.addMental(player, amount);
     }
 }

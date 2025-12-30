@@ -1,6 +1,8 @@
 package com.exodus.core;
 
-import com.exodus.core.player.PlayerHealthManager;
+import com.exodus.core.player.health.PlayerHealthManager;
+import com.exodus.core.player.stats.PlayerStatsManager;
+import com.exodus.core.player.vitals.PlayerVitalsManager;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +17,8 @@ public class ExodusCore implements ModInitializer {
 
         // Регистрируем события игрока
         PlayerHealthManager.registerEvents();
+        PlayerStatsManager.registerEvents();
+        PlayerVitalsManager.registerEvents();
 
         LOGGER.info("Exodus Core - Initialized successfully");
     }

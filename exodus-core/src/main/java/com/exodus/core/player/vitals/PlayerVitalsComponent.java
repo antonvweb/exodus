@@ -1,6 +1,7 @@
-package com.exodus.core.player;
+package com.exodus.core.player.vitals;
 
 import com.exodus.core.api.player.PlayerVitalsData;
+import com.exodus.core.player.stats.PlayerStatsComponent;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
 
