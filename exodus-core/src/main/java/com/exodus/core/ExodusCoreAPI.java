@@ -42,36 +42,39 @@ public class ExodusCoreAPI {
      * Установить HP части тела
      */
     public static void setBodyPartHP(Player player, BodyPart part, float hp) {
-        getHealthData(player).setBodyPartHP(part, hp);
+        getHealthData(player).setBodyPartHP(part, hp, player);
     }
 
     /**
      * Нанести урон части тела
      */
     public static void damageBodyPart(Player player, BodyPart part, float damage) {
-        getHealthData(player).damageBodyPart(part, damage);
+        getHealthData(player).damageBodyPart(part, damage, player);
     }
 
     /**
      * Восстановить HP части тела
      */
     public static void healBodyPart(Player player, BodyPart part, float amount) {
-        getHealthData(player).healBodyPart(part, amount);
+        getHealthData(player).healBodyPart(part, amount, player);
     }
 
     /**
      * Получить процент HP части тела
      */
-    public static float getBodyPartHPPercentage(Player player, BodyPart part) {
-        return getHealthData(player).getBodyPartHPPercentage(part);
+    public static float getMaxBodyPartHP(Player player, BodyPart part) {
+        return getHealthData(player).getMaxBodyPartHP(part, player);
     }
 
-    /**
-     * Получить состояние части тела
-     */
-    public static BodyPart.BodyPartState getBodyPartState(Player player, BodyPart part) {
-        return getHealthData(player).getBodyPartState(part);
+    public static float getBodyPartHPPercentage(Player player, BodyPart part) {
+        return getHealthData(player).getBodyPartHPPercentage(part, player); // ✅
     }
+
+    public static BodyPart.BodyPartState getBodyPartState(Player player, BodyPart part) {
+        return getHealthData(player).getBodyPartState(part, player); // ✅
+    }
+
+
 
     /**
      * Жив ли игрок
@@ -93,7 +96,7 @@ public class ExodusCoreAPI {
      * Убрать кровотечение с части тела
      */
     public static void removeBleeding(Player player, BodyPart part) {
-        getHealthData(player).removeBleeding(part);
+        getHealthData(player).removeBleeding(part, player);
     }
 
     /**
@@ -123,7 +126,7 @@ public class ExodusCoreAPI {
      * Убрать перелом с части тела
      */
     public static void removeFracture(Player player, BodyPart part) {
-        getHealthData(player).removeFracture(part);
+        getHealthData(player).removeFracture(part, player);
     }
 
     /**

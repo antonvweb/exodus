@@ -1,5 +1,6 @@
 package com.exodus.survival;
 
+import com.exodus.survival.commands.HealthCommand; // ← Добавь импорт
 import com.exodus.survival.health.effects.StatusEffectManager;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
@@ -12,4 +13,6 @@ public class ExodusSurvival implements ModInitializer {
     @Override
     public void onInitialize() {
         StatusEffectManager.register();
-    }}
+        HealthCommand.register(); // ← Добавь эту строчку
+    }
+}

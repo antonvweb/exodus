@@ -2,6 +2,8 @@ package com.exodus.core.player.stats;
 
 import com.exodus.core.api.player.StatType;
 import com.exodus.core.player.attributes.AttributeManager;
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.HashMap;
@@ -118,7 +120,12 @@ public class PlayerStatsManager {
      * Вызывается при инициализации мода
      */
     public static void registerEvents() {
-        // Можно добавить автосохранение, тикинг и т.д.
-        // Пока пусто, но готово к расширению
+        ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) ->{
+            AttributeManager.recalculate(newPlayer);
+        });
+
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->{
+            AttributeManager.recalculate(handler.getPlayer());
+        });
     }
 }

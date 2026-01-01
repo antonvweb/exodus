@@ -276,6 +276,9 @@ public class AttributeManager {
         addFormula(AttributeType.COMBAT_AVOIDANCE,
                 new AttributeFormula(StatType.CHARISMA, 0.05f, ADD)
         );
+
+        addFormula(AttributeType.MOVEMENT_SPEED,
+                new AttributeFormula(StatType.DEXTERITY, 0.01f, MULT_BASE));
     }
 
     /**
@@ -379,6 +382,10 @@ public class AttributeManager {
                 }
             }
         }
+
+        VanillaAttributeSynchronizer.synchronizeArmor(player);
+        VanillaAttributeSynchronizer.synchronizeAttackSpeed(player);
+        VanillaAttributeSynchronizer.synchronizeMovementSpeed(player);
     }
 
     /**

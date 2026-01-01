@@ -203,7 +203,9 @@ public enum AttributeType {
      * Базовое: 0.0 (0%), Min: 0.0, Max: 0.5 (50%)
      * Источник: CHA × 5%
      */
-    COMBAT_AVOIDANCE("combat_avoidance", "Избежать боя", 0.0f, 0.0f, 0.5f);
+    COMBAT_AVOIDANCE("combat_avoidance", "Избежать боя", 0.0f, 0.0f, 0.5f),
+
+    MOVEMENT_SPEED("movement_speed", "Скорость движения", 1.0f, 0.3f, 2.0f);
 
     // ==================== ПОЛЯ И МЕТОДЫ (без изменений) ====================
 

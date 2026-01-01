@@ -9,6 +9,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.player.Player;
 
 /**
  * HUD здоровья с человечком и эффектами на частях тела
@@ -77,41 +78,41 @@ public class BodyHealthHud {
         // === ГОЛОВА ===
         int headX = centerX - HEAD_WIDTH / 2;
         int headY = HUD_Y;
-        renderBodyPart(graphics, BodyPart.HEAD, headX, headY, data);
+        renderBodyPart(graphics, BodyPart.HEAD, headX, headY, data, mc.player);
 
         // === ТОРС ===
         int torsoX = centerX - TORSO_WIDTH / 2;
         int torsoY = headY + HEAD_HEIGHT;
-        renderBodyPart(graphics, BodyPart.TORSO, torsoX, torsoY, data);
+        renderBodyPart(graphics, BodyPart.TORSO, torsoX, torsoY, data, mc.player);
 
         // === РУКИ ===
         // На уровне плеч
 
         // Левая рука
         int leftArmX = torsoX - LIMB_WIDTH;
-        renderBodyPart(graphics, BodyPart.LEFT_ARM, leftArmX, torsoY, data);
+        renderBodyPart(graphics, BodyPart.LEFT_ARM, leftArmX, torsoY, data, mc.player);
 
         // Правая рука
         int rightArmX = torsoX + TORSO_WIDTH;
-        renderBodyPart(graphics, BodyPart.RIGHT_ARM, rightArmX, torsoY, data);
+        renderBodyPart(graphics, BodyPart.RIGHT_ARM, rightArmX, torsoY, data, mc.player);
 
         // === НОГИ ===
         int legsY = torsoY + TORSO_HEIGHT;
 
         // Левая нога
         int leftLegX = centerX - LIMB_WIDTH;
-        renderBodyPart(graphics, BodyPart.LEFT_LEG, leftLegX, legsY, data);
+        renderBodyPart(graphics, BodyPart.LEFT_LEG, leftLegX, legsY, data, mc.player);
 
         // Правая нога
-        renderBodyPart(graphics, BodyPart.RIGHT_LEG, centerX, legsY, data);
+        renderBodyPart(graphics, BodyPart.RIGHT_LEG, centerX, legsY, data, mc.player);
     }
 
     /**
      * Отрисовать одну часть тела
      */
-    private static void renderBodyPart(GuiGraphics graphics, BodyPart part, int x, int y, PlayerHealthData data) {
+    private static void renderBodyPart(GuiGraphics graphics, BodyPart part, int x, int y, PlayerHealthData data, Player player) {
         // Получаем состояние части тела
-        BodyPart.BodyPartState state = data.getBodyPartState(part);
+        BodyPart.BodyPartState state = data.getBodyPartState(part, player);
 
         // Формируем путь к текстуре
         String textureName = part.getId() + "_" + state.getTextureSuffix() + ".png";

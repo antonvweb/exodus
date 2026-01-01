@@ -1,9 +1,11 @@
 package com.exodus.survival.mixin;
 
 import com.exodus.core.ExodusCoreAPI;
+import com.exodus.core.api.attributes.AttributeType;
 import com.exodus.core.api.player.BleedingType;
 import com.exodus.core.api.player.BodyPart;
 import com.exodus.core.api.player.PlayerHealthData;
+import com.exodus.core.player.attributes.AttributeManager;
 import com.exodus.survival.health.damage.DeathHandler;
 import com.exodus.survival.health.damage.HitboxDetection;
 import com.exodus.survival.health.network.DamagePacket;
@@ -187,23 +189,25 @@ public abstract class PlayerDamageMixin {
         if (source.is(net.minecraft.world.damagesource.DamageTypes.FALL)) {
             // При сильном падении (>5 урона) - перелом НОГ
             if (damage > 5.0f && currentFractures < 2) {
-                double fractureChance = damage > 10.0f ? 1.0 : 0.5;
+                float fractureChance = (float) (damage > 10.0f ? 1.0 : 0.5);
+                float resistance = AttributeManager.getValue(player, AttributeType.FRACTURE_RESISTANCE);
+                float finalChance = fractureChance * (1.0f - resistance);
 
-                if (Math.random() < fractureChance) {
+                if (Math.random() < finalChance) {
                     float intensity = Math.min(1.0f, damage / 20.0f);
 
                     // Перелом той ноги куда попал урон
-                    ExodusCoreAPI.addFracture(player, hitPart, intensity);
+                    addFractureWithPain(player, hitPart, intensity);
                     currentFractures++;
 
-                    // Возможно сломаем и вторую ногу
-                    if (damage > 15.0f && Math.random() < 0.5f && currentFractures < 2) {
+                    float secondFractureChance = (float) (damage > 15.0f ? 0.3 : 0.2);
+                    float finalSecondChance = secondFractureChance * (1.0f - resistance);
+
+                    if (Math.random() < finalSecondChance && currentFractures < 2) {
                         BodyPart otherLeg = hitPart == BodyPart.LEFT_LEG ?
                                 BodyPart.RIGHT_LEG : BodyPart.LEFT_LEG;
-                        ExodusCoreAPI.addFracture(player, otherLeg, intensity * 0.7f);
+                        addFractureWithPain(player, otherLeg, intensity);
                     }
-
-                    player.sendSystemMessage(Component.literal("§c⚠ У вас перелом! Требуется лечение."));
                 }
             }
         }
@@ -214,7 +218,7 @@ public abstract class PlayerDamageMixin {
 
             // ✅ Шанс кровотечения зависит от урона И лимита
             if (currentBleedings < 3) {
-                double bleedingChance;
+                float bleedingChance;
 
                 if (damage < 4.0f) {
                     bleedingChance = 0.2f;  // 20% при слабом уроне
@@ -224,7 +228,10 @@ public abstract class PlayerDamageMixin {
                     bleedingChance = 0.6f;  // 60% при сильном уроне
                 }
 
-                if (Math.random() < bleedingChance) {
+                float resistance = AttributeManager.getValue(player, AttributeType.BLEED_RESISTANCE);
+                float finalChance = bleedingChance * (1.0f - resistance);
+
+                if (Math.random() < finalChance) {
                     // Тип кровотечения зависит от урона
                     BleedingType type;
                     if (damage < 5.0f) {
@@ -235,11 +242,29 @@ public abstract class PlayerDamageMixin {
                         type = BleedingType.STRONG;    // Сильное (БЕСКОНЕЧНОЕ!)
                     }
 
-                    ExodusCoreAPI.addBleeding(player, hitPart, type);
+                    addBleedingWithPain(player, hitPart, type);
+                }
+            }
 
-                    if (type == BleedingType.STRONG) {
-                        player.sendSystemMessage(Component.literal("§c§l⚠ СИЛЬНОЕ КРОВОТЕЧЕНИЕ! Требуется лечение!"));
-                    }
+            if(currentFractures < 2){
+              float fractureChance;
+
+              if (damage < 8.0f) {
+                fractureChance = 0.1f;  // 20% при слабом уроне
+              } else if (damage < 12.0f) {
+                fractureChance = 0.2f;  // 40% при среднем уроне
+              } else {
+                fractureChance = 0.4f;  // 60% при сильном уроне
+              }
+
+              float resistance = AttributeManager.getValue(player, AttributeType.FRACTURE_RESISTANCE);
+              float finalChance = fractureChance * (1.0f - resistance);
+
+                if (Math.random() < finalChance) {
+                    float intensity = Math.min(1.0f, damage / 20.0f);
+
+                    addFractureWithPain(player, hitPart, intensity);
+                    currentFractures++;
                 }
             }
         }
@@ -265,31 +290,80 @@ public abstract class PlayerDamageMixin {
 
                 // ✅ Кровотечение: только если < 3 и с шансом зависящим от урона
                 if (currentBleedings + bleedingsAdded < 3) {
-                    double bleedingChance = damage < 10.0f ? 0.4f : 0.6f; // 40-60%
+                    float bleedingChance = damage < 10.0f ? 0.4f : 0.6f; // 40-60%
+                    float resistance = AttributeManager.getValue(player, AttributeType.BLEED_RESISTANCE);
+                    float finalChance = bleedingChance * (1.0f - resistance);
 
-                    if (Math.random() < bleedingChance) {
-                        // Сильное кровотечение только при большом уроне
+                    if (Math.random() < finalChance) {
                         BleedingType type = damage > 15.0f ? BleedingType.STRONG : BleedingType.MEDIUM;
-                        ExodusCoreAPI.addBleeding(player, part, type);
+                        addBleedingWithPain(player, part, type);
                         bleedingsAdded++;
                     }
                 }
 
                 // ✅ Перелом: только если < 2 и с шансом зависящим от урона
                 if (currentFractures + fracturesAdded < 2) {
-                    double fractureChance = damage < 10.0f ? 0.3f : 0.5f; // 30-50%
+                    float fractureChance = damage < 10.0f ? 0.3f : 0.5f; // 30-50%
+                    float resistance = AttributeManager.getValue(player, AttributeType.FRACTURE_RESISTANCE);
+                    float finalChance = fractureChance * (1.0f - resistance);
 
-                    if (Math.random() < fractureChance) {
-                        ExodusCoreAPI.addFracture(player, part, intensity * 0.9f);
+                    if (Math.random() < finalChance) {
+                        addFractureWithPain(player, part, intensity);
                         fracturesAdded++;
                     }
                 }
             }
-
-            if (bleedingsAdded > 0 || fracturesAdded > 0) {
-                player.sendSystemMessage(Component.literal("§c§l⚠ Повреждения от взрыва!"));
-            }
         }
+    }
+
+    /**
+     * Добавить кровотечение С учётом боли и резистов
+     */
+    @Unique
+    private void addBleedingWithPain(Player player, BodyPart part, BleedingType type) {
+        // 1. Добавляем кровотечение (БЕЗ автоматической боли)
+        ExodusCoreAPI.addBleeding(player, part, type);
+
+        // 2. Если кровотечение вызывает боль - добавляем вручную
+        if (type.causesPain()) {
+            // Базовая интенсивность
+            float basePainIntensity = 0.6f;
+
+            // Резист боли
+            float painResist = AttributeManager.getValue(player, AttributeType.PAIN_RESISTANCE);
+
+            // Финальная интенсивность
+            float finalPainIntensity = basePainIntensity * (1.0f - painResist);
+
+            // Длительность
+            int duration = type.isInfinite() ?
+                    PlayerHealthData.INFINITE_DURATION :
+                    type.getRandomDuration() * 20;
+
+            // Добавляем боль
+            ExodusCoreAPI.addPain(player, duration, finalPainIntensity);
+        }
+    }
+
+    /**
+     * Добавить перелом С учётом боли и резистов
+     */
+    @Unique
+    private void addFractureWithPain(Player player, BodyPart part, float intensity) {
+        // 1. Добавляем перелом (БЕЗ автоматической боли)
+        ExodusCoreAPI.addFracture(player, part, intensity);
+
+        // 2. Вычисляем боль от перелома
+        float basePainIntensity = intensity * 0.8f; // Боль зависит от интенсивности перелома
+
+        // Резист боли
+        float painResist = AttributeManager.getValue(player, AttributeType.PAIN_RESISTANCE);
+
+        // Финальная интенсивность
+        float finalPainIntensity = basePainIntensity * (1.0f - painResist);
+
+        // Боль от перелома БЕСКОНЕЧНАЯ (пока не вылечат)
+        ExodusCoreAPI.addPain(player, PlayerHealthData.INFINITE_DURATION, finalPainIntensity);
     }
 
     /**

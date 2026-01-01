@@ -2,6 +2,7 @@ package com.exodus.core.player.health;
 
 import com.exodus.core.api.player.BodyPart;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
 
@@ -40,40 +41,45 @@ public class PlayerHealthManager {
      * Регистрация событий
      */
     public static void registerEvents() {
+        // ✅ При входе игрока - инициализируем HP с учётом CON
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            Player player = handler.getPlayer();
+            PlayerHealthComponent health = getComponent(player);
+
+            // Инициализируем HP с учётом атрибутов
+            health.getData().initializeHP(player);
+        });
+
         // При респавне - полное восстановление
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
-            if (!alive) { // Игрок умер и респавнился
+            if (!alive) {
                 PlayerHealthComponent healthComp = getComponent(newPlayer);
 
-                // ✅ Восстанавливаем HP всех частей тела
+                // ✅ Восстанавливаем HP с учётом CON
                 for (BodyPart part : BodyPart.values()) {
-                    healthComp.getData().setBodyPartHP(part, part.getMaxHP());
+                    float maxHP = healthComp.getData().getMaxBodyPartHP(part, newPlayer);
+                    healthComp.getData().setBodyPartHP(part, maxHP, newPlayer);
                 }
 
-                // ✅ Убираем ВСЕ кровотечения
+                // Убираем эффекты (без изменений)
                 for (BodyPart part : BodyPart.values()) {
                     if (healthComp.getData().hasBleeding(part)) {
-                        healthComp.getData().removeBleeding(part);
+                        healthComp.getData().removeBleeding(part, newPlayer);
                     }
                 }
 
-                // ✅ Убираем ВСЕ переломы
                 for (BodyPart part : BodyPart.values()) {
                     if (healthComp.getData().hasFracture(part)) {
-                        healthComp.getData().removeFracture(part);
+                        healthComp.getData().removeFracture(part, newPlayer);
                     }
                 }
 
-                // ✅ Убираем боль
                 healthComp.getData().removePain();
-
-                // ✅ Статы сохраняются после смерти (не сбрасываются)
             }
         });
 
-        // При переходе между мирами - копируем данные
+        // При переходе между мирами (без изменений)
         ServerPlayerEvents.COPY_FROM.register((oldPlayer, newPlayer, alive) -> {
-            // Копируем здоровье
             PlayerHealthComponent oldHealthComp = getComponent(oldPlayer);
             PlayerHealthComponent newHealthComp = getComponent(newPlayer);
 

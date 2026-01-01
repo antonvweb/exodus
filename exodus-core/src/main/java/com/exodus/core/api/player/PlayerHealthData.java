@@ -1,6 +1,10 @@
 package com.exodus.core.api.player;
 
+import com.exodus.core.api.attributes.AttributeType;
+import com.exodus.core.player.attributes.AttributeManager;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.player.Player;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -38,24 +42,41 @@ public class PlayerHealthData {
         this.painIntensity = 0f;
     }
 
+    /**
+     * Инициализировать HP с учётом атрибутов игрока
+     * Вызывается ОДИН РАЗ при входе игрока в мир
+     */
+    public void initializeHP(Player player) {
+        for (BodyPart part : BodyPart.values()) {
+            float maxHP = getMaxBodyPartHP(part, player);
+            bodyPartHP.put(part, maxHP); // Полное HP
+        }
+    }
+
     // ============ HP ЧАСТЕЙ ТЕЛА ============
 
     public float getBodyPartHP(BodyPart part) {
         return bodyPartHP.getOrDefault(part, 0f);
     }
 
-    public void setBodyPartHP(BodyPart part, float hp) {
-        bodyPartHP.put(part, Math.max(0, Math.min(part.getMaxHP(), hp)));
+    public float getMaxBodyPartHP(BodyPart part, Player player){
+        float baseMax = part.getMaxHP(); // Базовое (35, 85, etc)
+        float multiplier = AttributeManager.getValue(player, AttributeType.MAX_HEALTH_MULTIPLIER);
+        return baseMax * multiplier;
     }
 
-    public void damageBodyPart(BodyPart part, float damage) {
-        float currentHP = getBodyPartHP(part);
-        setBodyPartHP(part, currentHP - damage);
+    public void setBodyPartHP(BodyPart part, float hp, Player player) {
+        bodyPartHP.put(part, Math.max(0, Math.min(getMaxBodyPartHP(part, player), hp)));
     }
 
-    public void healBodyPart(BodyPart part, float amount) {
+    public void damageBodyPart(BodyPart part, float damage, Player player) {
         float currentHP = getBodyPartHP(part);
-        setBodyPartHP(part, currentHP + amount);
+        setBodyPartHP(part, currentHP - damage, player);
+    }
+
+    public void healBodyPart(BodyPart part, float amount, Player player) {
+        float currentHP = getBodyPartHP(part);
+        setBodyPartHP(part, currentHP + amount, player);
 
         // ✅ Если вылечили торс (HP > 0) - отменяем таймер смерти
         if (part == BodyPart.TORSO && currentHP <= 0 && getBodyPartHP(part) > 0) {
@@ -63,14 +84,14 @@ public class PlayerHealthData {
         }
     }
 
-    public float getBodyPartHPPercentage(BodyPart part) {
+    public float getBodyPartHPPercentage(BodyPart part, Player player) {
         float current = getBodyPartHP(part);
-        float max = part.getMaxHP();
+        float max = getMaxBodyPartHP(part, player);
         return max > 0 ? Math.max(0f, Math.min(1f, current / max)) : 0f;
     }
 
-    public BodyPart.BodyPartState getBodyPartState(BodyPart part) {
-        return part.getState(getBodyPartHPPercentage(part));
+    public BodyPart.BodyPartState getBodyPartState(BodyPart part, Player player) {
+        return part.getState(getBodyPartHPPercentage(part, player));
     }
 
     // ============ ТАЙМЕР ТОРСА (ВНУТРЕННИЙ) ============
@@ -242,23 +263,19 @@ public class PlayerHealthData {
         float damage = type.getRandomDamage();
 
         bleedingEffects.put(part, new BleedingEffect(duration, type, damage));
-
-        if (type.causesPain()) {
-            // Для бесконечного кровотечения - бесконечная боль
-            if (type.isInfinite()) {
-                addPain(INFINITE_DURATION, 0.6f);
-            } else {
-                addPain(duration, 0.6f);
-            }
-        }
     }
 
-    public void removeBleeding(BodyPart part) {
+    public void removeBleeding(BodyPart part, Player player) {
         BleedingEffect effect = bleedingEffects.remove(part);
 
         if (effect != null && effect.type.causesPain()) {
             int painAfter = effect.type.getPainDurationAfter() * 20;
-            addPain(painAfter, 0.4f);
+
+            float basePainIntensity = 0.4f;
+            float painResist = AttributeManager.getValue(player, AttributeType.PAIN_RESISTANCE);
+            float finalPainIntensity = basePainIntensity * (1.0f - painResist);
+
+            addPain(painAfter, finalPainIntensity);
         }
     }
 
@@ -290,15 +307,19 @@ public class PlayerHealthData {
         }
 
         fractureEffects.put(part, new FractureEffect(INFINITE_DURATION, intensity));
-        addPain(INFINITE_DURATION, intensity * 0.8f);
     }
 
-    public void removeFracture(BodyPart part) {
+    public void removeFracture(BodyPart part, Player player) {
         FractureEffect effect = fractureEffects.remove(part);
 
         if (effect != null) {
             int painAfter = (120 + (int)(Math.random() * 60)) * 20;
-            addPain(painAfter, 0.5f);
+
+            float basePainIntensity = 0.5f;
+            float painResist = AttributeManager.getValue(player, AttributeType.PAIN_RESISTANCE);
+            float finalPainIntensity = basePainIntensity * (1.0f - painResist);
+
+            addPain(painAfter, finalPainIntensity);
         }
     }
 
