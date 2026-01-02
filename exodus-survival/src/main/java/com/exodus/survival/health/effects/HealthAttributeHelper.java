@@ -78,6 +78,94 @@ public class HealthAttributeHelper {
     }
 
     /**
+     * Применить ЭКСТРЕМАЛЬНЫЙ штраф от УНИЧТОЖЕННОЙ ноги (HP = 0)
+     * Намного сильнее чем перелом!
+     */
+    public static void applyDestroyedLeg(Player player, BodyPart leg) {
+        String modifierName = "destroyed_" + leg.getId();
+
+        AttributeModifier modifier = new AttributeModifier(
+                modifierName,
+                -0.80f, // -80% скорости (почти не ходить)
+                AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL,
+                "destroyed_limb"  // ← Отдельный источник от переломов!
+        );
+
+        AttributeManager.addModifier(player, AttributeType.MOVEMENT_SPEED, modifier);
+    }
+
+    /**
+     * Применить ЭКСТРЕМАЛЬНЫЙ штраф если ОБЕ ноги уничтожены
+     */
+    public static void applyBothLegsDestroyed(Player player) {
+        AttributeModifier modifier = new AttributeModifier(
+                "both_legs_destroyed",
+                -0.95f, // -95% скорости (можно только ползти)
+                AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL,
+                "destroyed_limb"
+        );
+
+        AttributeManager.addModifier(player, AttributeType.MOVEMENT_SPEED, modifier);
+    }
+
+    /**
+     * Применить ЭКСТРЕМАЛЬНЫЙ штраф от УНИЧТОЖЕННОЙ руки (HP = 0)
+     */
+    public static void applyDestroyedArm(Player player, BodyPart arm) {
+        String modifierName = "destroyed_" + arm.getId();
+
+        // Mining Speed
+        AttributeModifier miningModifier = new AttributeModifier(
+                modifierName + "_mining",
+                -0.70f, // -70% скорости копания
+                AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL,
+                "destroyed_limb"
+        );
+        AttributeManager.addModifier(player, AttributeType.MINING_SPEED, miningModifier);
+
+        // Attack Speed
+        AttributeModifier attackModifier = new AttributeModifier(
+                modifierName + "_attack",
+                -0.50f, // -50% скорости атаки
+                AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL,
+                "destroyed_limb"
+        );
+        AttributeManager.addModifier(player, AttributeType.ATTACK_SPEED, attackModifier);
+    }
+
+    /**
+     * Применить ЭКСТРЕМАЛЬНЫЙ штраф если ОБЕ руки уничтожены
+     */
+    public static void applyBothArmsDestroyed(Player player) {
+        // Mining Speed
+        AttributeModifier miningModifier = new AttributeModifier(
+                "both_arms_destroyed_mining",
+                -0.90f, // -90% копания (почти невозможно копать)
+                AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL,
+                "destroyed_limb"
+        );
+        AttributeManager.addModifier(player, AttributeType.MINING_SPEED, miningModifier);
+
+        // Attack Speed
+        AttributeModifier attackModifier = new AttributeModifier(
+                "both_arms_destroyed_attack",
+                -0.80f, // -80% скорости атаки
+                AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL,
+                "destroyed_limb"
+        );
+        AttributeManager.addModifier(player, AttributeType.ATTACK_SPEED, attackModifier);
+    }
+
+    /**
+     * Убрать ВСЕ дебафы от уничтоженных конечностей
+     */
+    public static void clearDestroyedLimbDebuffs(Player player) {
+        AttributeManager.removeModifiersBySource(player, AttributeType.MOVEMENT_SPEED, "destroyed_limb");
+        AttributeManager.removeModifiersBySource(player, AttributeType.MINING_SPEED, "destroyed_limb");
+        AttributeManager.removeModifiersBySource(player, AttributeType.ATTACK_SPEED, "destroyed_limb");
+    }
+
+    /**
      * Убрать ВСЕ дебафы от переломов
      */
     public static void clearFractureDebuffs(Player player) {
@@ -92,5 +180,14 @@ public class HealthAttributeHelper {
     public static void clearPainDebuffs(Player player) {
         AttributeManager.removeModifiersBySource(player, AttributeType.MOVEMENT_SPEED, "pain");
         AttributeManager.removeModifiersBySource(player, AttributeType.MINING_SPEED, "pain");
+    }
+
+    /**
+     * Убрать дебафы от температуры
+     */
+    public static void clearTemperatureDebuffs(Player player) {
+        AttributeManager.removeModifiersBySource(player, AttributeType.MOVEMENT_SPEED, "temperature");
+        AttributeManager.removeModifiersBySource(player, AttributeType.STAMINA_REGEN, "temperature");
+        AttributeManager.removeModifiersBySource(player, AttributeType.THIRST_DRAIN_RATE, "temperature");
     }
 }

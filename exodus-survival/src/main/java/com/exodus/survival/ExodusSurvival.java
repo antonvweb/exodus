@@ -12,7 +12,8 @@ public class ExodusSurvival implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        ExodusSounds.register();      // ← ДОБАВЬ ЭТУ СТРОЧКУ
         StatusEffectManager.register();
-        HealthCommand.register(); // ← Добавь эту строчку
+        HealthCommand.register();
     }
 }

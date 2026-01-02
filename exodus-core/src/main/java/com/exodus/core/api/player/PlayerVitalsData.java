@@ -225,7 +225,7 @@ public class PlayerVitalsData {
     }
 
     public void setTemperature(float value) {
-        this.temperature = Math.max(34.0f, Math.min(40.0f, value));
+        this.temperature = Math.max(-100.0f, Math.min(100.0f, value));
     }
 
     public void addTemperature(float amount) {

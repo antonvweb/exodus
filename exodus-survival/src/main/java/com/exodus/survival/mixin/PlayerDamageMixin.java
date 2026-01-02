@@ -9,6 +9,7 @@ import com.exodus.core.player.attributes.AttributeManager;
 import com.exodus.survival.health.damage.DeathHandler;
 import com.exodus.survival.health.damage.HitboxDetection;
 import com.exodus.survival.health.network.DamagePacket;
+import com.exodus.survival.health.network.FracturePacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -38,6 +39,12 @@ public abstract class PlayerDamageMixin {
     )
     private void onPlayerHurt(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         Player player = (Player) (Object) this;
+
+        if (player.invulnerableTime > 0) {
+            cir.setReturnValue(false);
+            cir.cancel();
+            return;
+        }
 
         if (player.isCreative() || player.isInvulnerable()) {
             return;
@@ -74,7 +81,7 @@ public abstract class PlayerDamageMixin {
         }
 
         // ✅ ОПРЕДЕЛЯЕМ ЧАСТЬ ТЕЛА КУДА ПОПАЛ УРОН
-        BodyPart hitPart = determineHitBodyPart(source, player);
+        BodyPart hitPart = determineHitBodyPart(amount, source, player);
 
         // Наносим урон на эту часть тела
         ExodusCoreAPI.damageBodyPart(player, hitPart, amount);
@@ -137,6 +144,8 @@ public abstract class PlayerDamageMixin {
             return;
         }
 
+        player.invulnerableTime = 20;
+
         // Отменяем ванильный урон
         cir.setReturnValue(true);
         cir.cancel();
@@ -146,7 +155,7 @@ public abstract class PlayerDamageMixin {
      * Определить часть тела куда попал урон
      */
     @Unique
-    private BodyPart determineHitBodyPart(DamageSource source, Player player) {
+    private BodyPart determineHitBodyPart(float amount, DamageSource source, Player player) {
         // ПАДЕНИЕ - всегда ноги
         if (source.is(net.minecraft.world.damagesource.DamageTypes.FALL)) {
             return HitboxDetection.getFallBodyPart();
@@ -159,7 +168,9 @@ public abstract class PlayerDamageMixin {
             BodyPart[] parts = HitboxDetection.getExplosionBodyParts();
             // Наносим урон по всем частям
             for (int i = 1; i < parts.length; i++) {
-                ExodusCoreAPI.damageBodyPart(player, parts[i], 5.0f);
+                // Урон по дополнительным частям = % от основного урона
+                float additionalDamage = amount * 0.3f; // 30% от основного
+                ExodusCoreAPI.damageBodyPart(player, parts[i], additionalDamage);
             }
             return parts[0];
         }
@@ -353,16 +364,19 @@ public abstract class PlayerDamageMixin {
         // 1. Добавляем перелом (БЕЗ автоматической боли)
         ExodusCoreAPI.addFracture(player, part, intensity);
 
+        // ✅ ОТПРАВЛЯЕМ ПАКЕТ НА КЛИЕНТ ДЛЯ ЗВУКА ПЕРЕЛОМА
+        if (!player.level().isClientSide && player instanceof ServerPlayer serverPlayer) {
+            ServerPlayNetworking.send(
+                    serverPlayer,
+                    new FracturePacket(part.name(), intensity)
+            );
+        }
+
         // 2. Вычисляем боль от перелома
-        float basePainIntensity = intensity * 0.8f; // Боль зависит от интенсивности перелома
-
-        // Резист боли
+        float basePainIntensity = intensity * 0.8f;
         float painResist = AttributeManager.getValue(player, AttributeType.PAIN_RESISTANCE);
-
-        // Финальная интенсивность
         float finalPainIntensity = basePainIntensity * (1.0f - painResist);
 
-        // Боль от перелома БЕСКОНЕЧНАЯ (пока не вылечат)
         ExodusCoreAPI.addPain(player, PlayerHealthData.INFINITE_DURATION, finalPainIntensity);
     }
 

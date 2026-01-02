@@ -1,5 +1,6 @@
 package com.exodus.core.player.vitals;
 
+import com.exodus.core.ExodusCoreAPI;
 import com.exodus.core.player.attributes.AttributeManager;
 import com.exodus.core.api.attributes.AttributeType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -30,14 +31,11 @@ public class PlayerVitalsManager {
      * Получить компонент виталов игрока (создаёт если не существует)
      */
     public static PlayerVitalsComponent getComponent(Player player) {
-        return components.computeIfAbsent(player.getUUID(), uuid -> {
-            PlayerVitalsComponent vitals = new PlayerVitalsComponent(player);
-
-            // ✅ Обновляем максимумы из AttributeManager
-            updateMaxValues(player);
-
-            return vitals;
-        });
+        // ✅ Просто получаем/создаём компонент, БЕЗ дополнительной логики
+        return components.computeIfAbsent(
+                player.getUUID(),
+                uuid -> new PlayerVitalsComponent(player)
+        );
     }
 
     /**
@@ -182,17 +180,63 @@ public class PlayerVitalsManager {
         });
     }
 
+    private static void tickTemperature(ServerPlayer player){
+        // ========== ТЕМПЕРАТУРА ==========
+
+        boolean inFire = player.isOnFire();
+        boolean inLava = player.isInLava();
+        boolean inWater = player.isInWater();
+
+        float currentTemp = ExodusCoreAPI.getTemperature(player);
+        float baseChange = 0f;
+
+        // 1. Определяем базовое изменение
+        if (inLava) {
+            baseChange = 2.0f;
+        } else if (inFire) {
+            baseChange = 0.5f;
+        } else if (inWater) {
+            baseChange = -0.3f;
+        } else {
+            // Стабилизация к 37°C
+            if (currentTemp < 37.0f) {
+                baseChange = 0.05f; // Нагреваемся к норме
+            } else if (currentTemp > 37.0f) {
+                baseChange = -0.05f; // Остываем к норме
+            }
+        }
+
+        // 2. Определяем нужен ли резист
+        boolean movingAwayFromNormal = false;
+
+        if (baseChange > 0) {
+            // НАГРЕВ: резист нужен только если температура УЖЕ выше нормы
+            movingAwayFromNormal = (currentTemp > 37.0f);
+        } else if (baseChange < 0) {
+            // ОХЛАЖДЕНИЕ: резист нужен только если температура УЖЕ ниже нормы
+            movingAwayFromNormal = (currentTemp < 37.0f);
+        }
+
+        // 3. Применяем резист (только если отдаляемся от нормы)
+        float resistance = AttributeManager.getValue(player, AttributeType.TEMPERATURE_RESISTANCE);
+        float finalChange;
+
+        if (movingAwayFromNormal) {
+            finalChange = baseChange * (1.0f - resistance);
+        } else {
+            finalChange = baseChange; // Без резиста
+        }
+
+        // 4. Применяем изменение
+        ExodusCoreAPI.addTemperature(player, finalChange);
+    }
+
     /**
      * Обновление виталов для одного игрока
      */
     private static void tickVitals(ServerPlayer player) {
-        // TODO: Реализовать расход/восстановление виталов
-        // - Расход сытости (с учётом AttributeManager.getValue(HUNGER_DRAIN_RATE))
-        // - Расход жажды
-        // - Восстановление стамины
-        // - Изменение температуры
-        // - Изменение психики
+        tickTemperature(player);
 
-        // Это большая система, сделаем позже!
+        // TODO: Дебафы от температуры (следующий шаг)
     }
 }

@@ -1,0 +1,129 @@
+package com.exodus.survival.client.health.effects.sounds;
+
+import com.exodus.survival.ExodusSounds;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.util.Mth;
+
+/**
+ * Звуковые эффекты для статусов
+ * Использует кастомные звуки Exodus
+ */
+public class StatusSounds {
+
+    // Текущие зацикленные звуки
+    private static LoopingSoundInstance hypothermiaSound = null;
+    private static LoopingSoundInstance hyperthermiaSound = null;
+
+    // Таймеры для разовых звуков
+    private static long lastShiverSound = 0;
+    private static final long SHIVER_INTERVAL = 8000;
+
+    // ============ ГИПОТЕРМИЯ (ХОЛОД) ============
+
+    /**
+     * Обновить ambient звук холода (зацикленный)
+     */
+    public static void updateHypothermiaAmbient(boolean shouldPlay, float temperature) {
+        Minecraft mc = Minecraft.getInstance();
+
+        if (shouldPlay) {
+            // ✅ Если звук не играет - запустить
+            if (hypothermiaSound == null || !mc.getSoundManager().isActive(hypothermiaSound)) {
+
+                float severity = Mth.clamp((35.0f - temperature) / 2.0f, 0.3f, 1.0f);
+
+                hypothermiaSound = new LoopingSoundInstance(
+                        ExodusSounds.HYPOTHERMIA_AMBIENT,
+                        severity * 0.4f, // Громкость (тихий фон)
+                        1.0f
+                );
+
+                mc.getSoundManager().play(hypothermiaSound);
+            } else {
+                float severity = Mth.clamp((35.0f - temperature) / 2.0f, 0.3f, 1.0f);
+                hypothermiaSound.setVolume(severity * 0.4f);
+            }
+
+        } else {
+            if (hypothermiaSound != null) {
+                hypothermiaSound.fadeOut();
+                hypothermiaSound = null;
+            }
+        }
+    }
+
+    // ============ ГИПЕРТЕРМИЯ (ЖАРА) ============
+
+    /**
+     * Обновить звук тяжёлого дыхания (зацикленный)
+     */
+    public static void updateHyperthermiaBreath(boolean shouldPlay, float temperature) {
+        Minecraft mc = Minecraft.getInstance();
+
+        if (shouldPlay) {
+            // ✅ Если звук не играет - запустить
+            if (hyperthermiaSound == null || !mc.getSoundManager().isActive(hyperthermiaSound)) {
+
+                float severity = Mth.clamp((temperature - 38.0f) / 2.0f, 0.3f, 1.0f);
+
+                hyperthermiaSound = new LoopingSoundInstance(
+                        ExodusSounds.HYPERTHERMIA_BREATH,
+                        severity * 0.5f,
+                        1.0f
+                );
+
+                mc.getSoundManager().play(hyperthermiaSound);
+            } else {
+                // ✅ Обновляем громкость
+                float severity = Mth.clamp((temperature - 38.0f) / 2.0f, 0.3f, 1.0f);
+                hyperthermiaSound.setVolume(severity * 0.5f);
+            }
+
+        } else {
+            // ❌ Остановить
+            if (hyperthermiaSound != null) {
+                hyperthermiaSound.fadeOut();
+                hyperthermiaSound = null;
+            }
+        }
+    }
+
+    // ============ ПЕРЕЛОМ ============
+
+    /**
+     * Звук перелома костей (один раз)
+     */
+    public static void playFractureSound() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+
+        mc.getSoundManager().play(
+                SimpleSoundInstance.forLocalAmbience(
+                        ExodusSounds.FRACTURE_BONES,
+                        1.5f,
+                        1.0f
+                )
+        );
+    }
+
+    // ============ ОСТАНОВКА ВСЕХ ЗВУКОВ ============
+
+    /**
+     * Остановить все зацикленные звуки
+     * Вызывается при смерти/респавне/выходе
+     */
+    public static void stopAll() {
+        if (hypothermiaSound != null) {
+            hypothermiaSound.fadeOut();
+            hypothermiaSound = null;
+        }
+
+        if (hyperthermiaSound != null) {
+            hyperthermiaSound.fadeOut();
+            hyperthermiaSound = null;
+        }
+
+        lastShiverSound = 0;
+    }
+}

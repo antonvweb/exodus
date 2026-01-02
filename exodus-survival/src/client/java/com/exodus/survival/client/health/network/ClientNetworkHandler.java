@@ -1,8 +1,11 @@
 package com.exodus.survival.client.health.network;
 
-import com.exodus.survival.client.health.effects.CameraShake;
-import com.exodus.survival.client.health.effects.DamageSounds;
+import com.exodus.survival.client.health.effects.*;
+import com.exodus.survival.client.health.effects.sounds.StatusSounds;
 import com.exodus.survival.health.network.DamagePacket;
+import com.exodus.survival.health.network.CameraShakePacket;
+import com.exodus.survival.health.network.FracturePacket;
+import com.exodus.survival.health.network.HeadSpinPacket;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 
@@ -11,38 +14,69 @@ import net.minecraft.client.Minecraft;
  */
 public class ClientNetworkHandler {
 
-    /**
-     * Регистрация обработчиков пакетов
-     */
     public static void register() {
-        System.out.println("=== REGISTERING CLIENT NETWORK HANDLERS ===");
-
-        // Обработчик пакета урона
-        ClientPlayNetworking.registerGlobalReceiver(DamagePacket.TYPE, (packet, player, responseSender) -> {
+          ClientPlayNetworking.registerGlobalReceiver(DamagePacket.TYPE, (packet, player, responseSender) -> {
             float damage = packet.getDamage();
 
-            System.out.println("=== RECEIVED DAMAGE PACKET! Damage: " + damage + " ===");
-
-            // Выполняем на главном потоке клиента
             Minecraft.getInstance().execute(() -> {
-                System.out.println("=== APPLYING CLIENT EFFECTS... ===");
+                DamageShake.addShake(damage);
 
-                // ✅ Тряска камеры (простая как в ванилле)
-                CameraShake.addShake(damage);
-
-                // ✅ Звук удара (зависит от силы урона)
                 if (damage >= 5.0f) {
-                    // Тяжёлый удар
                     DamageSounds.playCriticalHurtSound(damage);
                 } else {
-                    // Обычный удар
                     DamageSounds.playHurtSound(damage);
                 }
-
-                System.out.println("=== CLIENT EFFECTS APPLIED! ===");
             });
         });
 
-        System.out.println("=== CLIENT NETWORK HANDLERS REGISTERED ===");
+        ClientPlayNetworking.registerGlobalReceiver(CameraShakePacket.TYPE, (packet, player, responseSender) -> {
+            boolean activate = packet.shouldActivate();
+            float intensity = packet.getIntensity();
+
+            Minecraft.getInstance().execute(() -> {
+                if (activate) {
+                    CameraShakeEffect.activate(intensity);
+
+                    StatusSounds.updateHypothermiaAmbient(true, 34.0f);
+                } else {
+                    CameraShakeEffect.deactivate();
+                    StatusSounds.updateHypothermiaAmbient(false, 37.0f);
+                }
+            });
+        });
+
+        ClientPlayNetworking.registerGlobalReceiver(HeadSpinPacket.TYPE, (packet, player, responseSender) -> {
+            boolean activate = packet.shouldActivate();
+            float intensity = packet.getIntensity();
+
+            Minecraft.getInstance().execute(() -> {
+                if (activate) {
+                    HeadSpinEffect.activate(intensity);
+                    StatusSounds.updateHyperthermiaBreath(true, 39.0f);
+                } else {
+                    HeadSpinEffect.deactivate();
+                    StatusSounds.updateHyperthermiaBreath(false, 37.0f);
+                }
+            });
+        });
+
+        // В методе register() добавьте:
+        ClientPlayNetworking.registerGlobalReceiver(FracturePacket.TYPE, (packet, player, responseSender) -> {
+            String bodyPart = packet.getBodyPart();
+            float intensity = packet.getIntensity();
+
+            Minecraft.getInstance().execute(() -> {
+                // Проигрываем звук перелома
+                StatusSounds.playFractureSound();
+
+                // Можно также добавить другие эффекты:
+                // - Визуальные частицы
+                // - Экранный эффект
+                // - Сообщение в чат
+                if (intensity > 0.7f) {
+                    DamageShake.addShake(3.0f); // Лёгкая тряска для сильных переломов
+                }
+            });
+        });
     }
 }

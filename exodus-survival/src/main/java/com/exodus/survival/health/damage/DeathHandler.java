@@ -32,19 +32,6 @@ public class DeathHandler {
         if (player.isDeadOrDying()) {
             return;
         }
-
-        String playerName = player.getDisplayName().getString();
-
-        // Получаем конкретную причину смерти
-        PlayerHealthData.DeathCause deathCause = ExodusCoreAPI.getHealthData(player).getDeathCause();
-
-        String deathMessage = getDeathMessage(playerName, source, deathCause);
-
-        // Отправляем сообщение о смерти ОДИН РАЗ
-        player.sendSystemMessage(Component.literal(deathMessage));
-
-        System.out.println("=== PLAYER DEATH! Cause: " + deathCause + ", Source: " + source.getMsgId() + " ===");
-
         // Убиваем игрока
         player.hurt(player.damageSources().generic(), 1000.0f);
     }

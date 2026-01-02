@@ -1,13 +1,23 @@
 package com.exodus.survival.health.effects;
 
 import com.exodus.core.ExodusCoreAPI;
+import com.exodus.core.api.attributes.AttributeModifier;
+import com.exodus.core.api.attributes.AttributeType;
 import com.exodus.core.api.player.BodyPart;
 import com.exodus.core.api.player.PlayerHealthData;
+import com.exodus.core.api.player.PlayerVitalsData;
+import com.exodus.core.player.attributes.AttributeManager;
+import com.exodus.core.player.attributes.VanillaAttributeSynchronizer;
+import com.exodus.core.player.vitals.PlayerVitalsManager;
 import com.exodus.survival.health.damage.DeathHandler;
+import com.exodus.survival.health.network.CameraShakePacket;
+import com.exodus.survival.health.network.HeadSpinPacket;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
+
+import java.util.*;
 
 /**
  * Менеджер статусных эффектов
@@ -16,6 +26,9 @@ import net.minecraft.world.effect.MobEffects;
 public class StatusEffectManager {
 
     private static int tickCounter = 0;
+
+    private static final Map<UUID, Boolean> lastShakeState = new HashMap<>();
+    private static final Map<UUID, Boolean> lastSpinState = new HashMap<>();
 
     /**
      * Регистрировать систему эффектов
@@ -27,6 +40,10 @@ public class StatusEffectManager {
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 tickEffects(player);
             }
+        });
+
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            lastShakeState.remove(handler.getPlayer().getUUID());
         });
     }
 
@@ -46,14 +63,160 @@ public class StatusEffectManager {
 
             // ✅ ПРОВЕРКА СМЕРТИ
             checkDeathFromEffects(player);
+
+            applyTemperatureDamage(player);
         }
 
         // Применяем дебафы каждый тик
         applyFractureDebuffs(player);
-        applyPainDebuffs(player);
 
         // ✅ Дебафы от уничтоженных конечностей
         applyDestroyedLimbsDebuffs(player);
+
+        // ✅ ДОБАВЬ ЭТО: Дебафы от температуры
+        applyTemperatureDebuffs(player);
+    }
+
+    /**
+     * Дебафы от температуры (скорость, стамина, жажда)
+     * Вызывается КАЖДЫЙ ТИК
+     */
+    private static void applyTemperatureDebuffs(ServerPlayer player) {
+        PlayerVitalsData vitals = PlayerVitalsManager.getComponent(player).getData();
+
+        // ✅ СНАЧАЛА очищаем старые модификаторы
+        HealthAttributeHelper.clearTemperatureDebuffs(player);
+
+        // Определяем дебафы в зависимости от температуры
+        float speedPenalty = 0.0f;
+        float staminaPenalty = 0.0f;
+        float thirstPenalty = 0.0f;
+
+        if (vitals.isSevereHypothermia()) {
+            // <35°C - ТЯЖЁЛАЯ гипотермия
+            speedPenalty = -0.3f;       // -30% скорости
+            staminaPenalty = -1.0f;     // Стамина НЕ восстанавливается (-100%)
+        } else if (vitals.isHypothermia()) {
+            // 35-36°C - гипотермия
+            speedPenalty = -0.1f;       // -10% скорости
+            staminaPenalty = -0.3f;     // -30% восстановления стамины
+        } else if (vitals.isSevereHyperthermia()) {
+            // >38.5°C - ТЯЖЁЛАЯ гипертермия
+            thirstPenalty = 0.5f;       // +50% расхода жажды (в 1.5 раза быстрее!)
+        } else if (vitals.isHyperthermia()) {
+            // 37.6-38.5°C - гипертермия
+            staminaPenalty = -0.2f;     // -20% восстановления стамины
+            thirstPenalty = 0.2f;       // +20% расхода жажды
+        }
+
+        // Применяем модификаторы (только если есть штраф)
+
+        if (speedPenalty != 0) {
+            AttributeModifier speedMod = new AttributeModifier(
+                    "temperature_speed",
+                    speedPenalty,
+                    AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL,
+                    "temperature"
+            );
+            AttributeManager.addModifier(player, AttributeType.MOVEMENT_SPEED, speedMod);
+        }
+
+        if (staminaPenalty != 0) {
+            AttributeModifier staminaMod = new AttributeModifier(
+                    "temperature_stamina",
+                    staminaPenalty,
+                    AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL,
+                    "temperature"
+            );
+            AttributeManager.addModifier(player, AttributeType.STAMINA_REGEN, staminaMod);
+        }
+
+        if (thirstPenalty != 0) {
+            AttributeModifier thirstMod = new AttributeModifier(
+                    "temperature_thirst",
+                    thirstPenalty,
+                    AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL,
+                    "temperature"
+            );
+            AttributeManager.addModifier(player, AttributeType.THIRST_DRAIN_RATE, thirstMod);
+        }
+
+        boolean shouldShake = vitals.isSevereHypothermia();
+        Boolean lastShake = lastShakeState.get(player.getUUID());
+
+        if (lastShake == null || lastShake != shouldShake) {
+            float intensity = shouldShake ? 1.2f : 0.0f; // 1.2° дрожи
+
+            ServerPlayNetworking.send(
+                    player,
+                    new CameraShakePacket(shouldShake, intensity)
+            );
+
+            lastShakeState.put(player.getUUID(), shouldShake);
+        }
+
+        // ✅ КРУЖЕНИЕ от жары (плавное)
+        boolean shouldSpin = vitals.isSevereHyperthermia();
+        Boolean lastSpin = lastSpinState.get(player.getUUID());
+
+        if (lastSpin == null || lastSpin != shouldSpin) {
+            float intensity = shouldSpin ? 15.0f : 0.0f; // 15°/сек кружение
+
+            ServerPlayNetworking.send(
+                    player,
+                    new HeadSpinPacket(shouldSpin, intensity)
+            );
+
+            lastSpinState.put(player.getUUID(), shouldSpin);
+        }
+
+        // ✅ Синхронизируем с ванилью
+        VanillaAttributeSynchronizer.synchronizeMovementSpeed(player);
+    }
+
+    /**
+     * Урон от экстремальной температуры
+     * Вызывается РАЗ В СЕКУНДУ
+     */
+    private static void applyTemperatureDamage(ServerPlayer player) {
+        PlayerVitalsData vitals = PlayerVitalsManager.getComponent(player).getData();
+
+        float damage = 0.0f;
+
+        if (vitals.isSevereHypothermia()) {
+            damage = 0.5f; // 0.5 HP/сек
+        } else if (vitals.isSevereHyperthermia()) {
+            damage = 0.3f; // 0.3 HP/сек
+        }
+
+        // Применяем урон на случайную живую часть
+        if (damage > 0) {
+            BodyPart randomPart = getRandomAliveBodyPart(player);
+
+            if (randomPart != null) {
+                ExodusCoreAPI.damageBodyPart(player, randomPart, damage);
+            }
+        }
+    }
+
+    /**
+     * Получить случайную живую часть тела
+     */
+    private static BodyPart getRandomAliveBodyPart(ServerPlayer player) {
+        List<BodyPart> aliveParts = new ArrayList<>();
+
+        for (BodyPart part : BodyPart.values()) {
+            if (ExodusCoreAPI.getBodyPartHP(player, part) > 0) {
+                aliveParts.add(part);
+            }
+        }
+
+        if (aliveParts.isEmpty()) {
+            return null;
+        }
+
+        int randomIndex = (int) (Math.random() * aliveParts.size());
+        return aliveParts.get(randomIndex);
     }
 
     /**
@@ -169,103 +332,82 @@ public class StatusEffectManager {
     private static void applyFractureDebuffs(ServerPlayer player) {
         PlayerHealthData data = ExodusCoreAPI.getHealthData(player);
 
-        boolean torsoFracture = data.hasFracture(BodyPart.TORSO);
-        boolean leftArmFracture = data.hasFracture(BodyPart.LEFT_ARM);
-        boolean rightArmFracture = data.hasFracture(BodyPart.RIGHT_ARM);
-        boolean leftLegFracture = data.hasFracture(BodyPart.LEFT_LEG);
-        boolean rightLegFracture = data.hasFracture(BodyPart.RIGHT_LEG);
+        // ✅ СНАЧАЛА очищаем старые модификаторы от переломов
+        HealthAttributeHelper.clearFractureDebuffs(player);
 
-        // НОГИ - Замедление
-        if (leftLegFracture || rightLegFracture) {
-            float legIntensity = 0f;
-            if (leftLegFracture) legIntensity = Math.max(legIntensity, data.getFractureIntensity(BodyPart.LEFT_LEG));
-            if (rightLegFracture) legIntensity = Math.max(legIntensity, data.getFractureIntensity(BodyPart.RIGHT_LEG));
-
-            int amplifier = (leftLegFracture && rightLegFracture) ?
-                    Math.max(2, (int)(legIntensity * 5)) :
-                    Math.max(1, (int)(legIntensity * 3));
-
-            player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, amplifier, false, false));
+        // НОГИ
+        if (data.hasFracture(BodyPart.LEFT_LEG)) {
+            float intensity = data.getFractureIntensity(BodyPart.LEFT_LEG);
+            HealthAttributeHelper.applyLegFracture(player, BodyPart.LEFT_LEG, intensity);
         }
 
-        // РУКИ - Mining Fatigue + Weakness
-        if (leftArmFracture || rightArmFracture) {
-            float armIntensity = 0f;
-            if (leftArmFracture) armIntensity = Math.max(armIntensity, data.getFractureIntensity(BodyPart.LEFT_ARM));
-            if (rightArmFracture) armIntensity = Math.max(armIntensity, data.getFractureIntensity(BodyPart.RIGHT_ARM));
-
-            int amplifier = (leftArmFracture && rightArmFracture) ?
-                    Math.max(2, (int)(armIntensity * 4)) :
-                    Math.max(1, (int)(armIntensity * 2));
-
-            player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 2, amplifier, false, false));
-            player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 2, 0, false, false));
+        if (data.hasFracture(BodyPart.RIGHT_LEG)) {
+            float intensity = data.getFractureIntensity(BodyPart.RIGHT_LEG);
+            HealthAttributeHelper.applyLegFracture(player, BodyPart.RIGHT_LEG, intensity);
         }
 
-        // ТОРС - Hunger
-        if (torsoFracture) {
-            float torsoIntensity = data.getFractureIntensity(BodyPart.TORSO);
-            player.addEffect(new MobEffectInstance(MobEffects.HUNGER, 2, (int)(torsoIntensity * 2), false, false));
-        }
-    }
-
-    /**
-     * Боль - глобальные дебафы
-     */
-    private static void applyPainDebuffs(ServerPlayer player) {
-        if (!ExodusCoreAPI.hasPain(player)) {
-            return;
+        // РУКИ (ИСПРАВЛЕНО!)
+        if (data.hasFracture(BodyPart.LEFT_ARM)) {
+            float intensity = data.getFractureIntensity(BodyPart.LEFT_ARM);
+            HealthAttributeHelper.applyArmFracture(player, BodyPart.LEFT_ARM, intensity); // ← applyArmFracture, не Leg!
         }
 
-        float intensity = ExodusCoreAPI.getPainIntensity(player);
-
-        // Mining Fatigue
-        int miningAmplifier = Math.max(0, (int) (intensity * 2));
-        player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 2, miningAmplifier, false, false));
-
-        // Slowness
-        int movementAmplifier = (int) (intensity * 0.5f);
-        if (movementAmplifier > 0) {
-            player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, movementAmplifier, false, false));
+        if (data.hasFracture(BodyPart.RIGHT_ARM)) {
+            float intensity = data.getFractureIntensity(BodyPart.RIGHT_ARM);
+            HealthAttributeHelper.applyArmFracture(player, BodyPart.RIGHT_ARM, intensity); // ← applyArmFracture!
         }
 
-        // Nausea при >70%
-        if (intensity > 0.7f) {
-            player.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 2, 0, false, false));
-        }
+        // ✅ Синхронизируем с ванилью
+        VanillaAttributeSynchronizer.synchronizeMovementSpeed(player);
+        VanillaAttributeSynchronizer.synchronizeAttackSpeed(player);
     }
 
     /**
      * ✅ Дебафы от УНИЧТОЖЕННЫХ конечностей (HP = 0)
      */
+    /**
+     * ✅ Дебафы от УНИЧТОЖЕННЫХ конечностей (HP = 0)
+     * НАМНОГО СИЛЬНЕЕ чем от переломов!
+     */
     private static void applyDestroyedLimbsDebuffs(ServerPlayer player) {
+        // ✅ СНАЧАЛА очищаем старые модификаторы от уничтоженных конечностей
+        HealthAttributeHelper.clearDestroyedLimbDebuffs(player);
+
         boolean leftArmDestroyed = ExodusCoreAPI.getBodyPartHP(player, BodyPart.LEFT_ARM) <= 0;
         boolean rightArmDestroyed = ExodusCoreAPI.getBodyPartHP(player, BodyPart.RIGHT_ARM) <= 0;
         boolean leftLegDestroyed = ExodusCoreAPI.getBodyPartHP(player, BodyPart.LEFT_LEG) <= 0;
         boolean rightLegDestroyed = ExodusCoreAPI.getBodyPartHP(player, BodyPart.RIGHT_LEG) <= 0;
 
-        // ✅ РУКИ УНИЧТОЖЕНЫ
-        if (leftArmDestroyed || rightArmDestroyed) {
-            if (leftArmDestroyed && rightArmDestroyed) {
-                // ОБЕ руки → СИЛЬНОЕ утомление
-                player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 2, 4, false, false));
-                player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 2, 2, false, false));
-            } else {
-                // ОДНА рука → среднее утомление
-                player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 2, 2, false, false));
-                player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 2, 1, false, false));
+        // ✅ НОГИ УНИЧТОЖЕНЫ
+        if (leftLegDestroyed && rightLegDestroyed) {
+            // ОБЕ ноги → ЭКСТРЕМАЛЬНОЕ замедление (-95%)
+            HealthAttributeHelper.applyBothLegsDestroyed(player);
+        } else {
+            // ОДНА нога → сильное замедление (-80%)
+            if (leftLegDestroyed) {
+                HealthAttributeHelper.applyDestroyedLeg(player, BodyPart.LEFT_LEG);
+            }
+            if (rightLegDestroyed) {
+                HealthAttributeHelper.applyDestroyedLeg(player, BodyPart.RIGHT_LEG);
             }
         }
 
-        // ✅ НОГИ УНИЧТОЖЕНЫ
-        if (leftLegDestroyed || rightLegDestroyed) {
-            if (leftLegDestroyed && rightLegDestroyed) {
-                // ОБЕ ноги → СИЛЬНОЕ замедление (почти не ходить)
-                player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, 4, false, false));
-            } else {
-                // ОДНА нога → хромание (можно ходить, но медленно)
-                player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, 2, false, false));
+        // ✅ РУКИ УНИЧТОЖЕНЫ
+        if (leftArmDestroyed && rightArmDestroyed) {
+            // ОБЕ руки → ЭКСТРЕМАЛЬНОЕ утомление (-90% mining, -80% attack)
+            HealthAttributeHelper.applyBothArmsDestroyed(player);
+        } else {
+            // ОДНА рука → сильное утомление (-70% mining, -50% attack)
+            if (leftArmDestroyed) {
+                HealthAttributeHelper.applyDestroyedArm(player, BodyPart.LEFT_ARM);
+            }
+            if (rightArmDestroyed) {
+                HealthAttributeHelper.applyDestroyedArm(player, BodyPart.RIGHT_ARM);
             }
         }
+
+        // ✅ Синхронизируем с ванилью
+        VanillaAttributeSynchronizer.synchronizeMovementSpeed(player);
+        VanillaAttributeSynchronizer.synchronizeAttackSpeed(player);
     }
 }

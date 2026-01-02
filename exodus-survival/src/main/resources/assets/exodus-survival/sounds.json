@@ -1,0 +1,29 @@
+{
+  "ambient.hypothermia_ambient": {
+    "sounds": [
+      {
+        "name": "exodus-survival:ambient/hypothermia_ambient",
+        "stream": true
+      }
+    ],
+    "subtitle": "Дрожь от холода"
+  },
+  "ambient.hyperthermia_breath": {
+    "sounds": [
+      {
+        "name": "exodus-survival:ambient/hyperthermia_breath",
+        "stream": true
+      }
+    ],
+    "subtitle": "Тяжёлое дыхание"
+  },
+  "ambient.fracture_bones": {
+    "sounds": [
+      {
+        "name": "exodus-survival:ambient/fracture_bones",
+        "stream": false
+      }
+    ],
+    "subtitle": "Хруст костей"
+  }
+}

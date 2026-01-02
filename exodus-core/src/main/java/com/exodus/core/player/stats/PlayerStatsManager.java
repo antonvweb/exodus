@@ -2,6 +2,7 @@ package com.exodus.core.player.stats;
 
 import com.exodus.core.api.player.StatType;
 import com.exodus.core.player.attributes.AttributeManager;
+import com.exodus.core.player.vitals.PlayerVitalsManager;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.world.entity.player.Player;
@@ -59,6 +60,7 @@ public class PlayerStatsManager {
 
         // ✅ Пересчитываем атрибуты после изменения стата!
         AttributeManager.recalculate(player);
+        PlayerVitalsManager.updateMaxValues(player);
     }
 
     /**
@@ -71,6 +73,7 @@ public class PlayerStatsManager {
         if (increased) {
             // ✅ Пересчитываем атрибуты после увеличения!
             AttributeManager.recalculate(player);
+            PlayerVitalsManager.updateMaxValues(player);
         }
 
         return increased;
@@ -126,6 +129,7 @@ public class PlayerStatsManager {
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->{
             AttributeManager.recalculate(handler.getPlayer());
+            PlayerVitalsManager.updateMaxValues(handler.getPlayer());
         });
     }
 }

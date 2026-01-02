@@ -34,8 +34,6 @@ public class DamageSounds {
                         volume
                 )
         );
-
-        System.out.println("=== PLAYED HURT SOUND! Volume: " + volume + ", Pitch: " + pitch + " ===");
     }
 
     /**
@@ -58,7 +56,27 @@ public class DamageSounds {
                         volume
                 )
         );
+    }
 
-        System.out.println("=== PLAYED CRITICAL HURT SOUND! ===");
+    /**
+     * Воспроизвести звук перелома костей
+     */
+    public static void playBrokenBonesSound(float damage) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) {
+            return;
+        }
+
+        // Для критического урона используем более тяжёлый звук
+        float volume = Mth.clamp(damage / 10.0f, 0.5f, 1.0f);
+        float pitch = 0.7f; // Низкий звук для тяжёлого удара
+
+        mc.getSoundManager().play(
+                SimpleSoundInstance.forLocalAmbience(
+                        SoundEvents.PLAYER_HURT,
+                        pitch,
+                        volume
+                )
+        );
     }
 }

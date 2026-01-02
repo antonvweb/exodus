@@ -65,6 +65,72 @@ public class BodyHealthHud {
 
         // Рисуем боль (глобально)
         renderPain(graphics, data, mc);
+
+        // ✅ ДОБАВЬ ЭТО: Рисуем температуру
+        renderTemperature(graphics, mc);
+    }
+
+    /**
+     * Отрисовать температуру тела
+     */
+    private static void renderTemperature(GuiGraphics graphics, Minecraft mc) {
+        // Получаем температуру
+        float temperature = ExodusCoreAPI.getTemperature(mc.player);
+
+        // Позиция под болью (или выше, если боли нет)
+        int tempX = HUD_X + TORSO_WIDTH + LIMB_WIDTH + 20;
+        int tempY = HUD_Y + 60; // Ниже боли на 20 пикселей
+
+        // Определяем цвет в зависимости от температуры
+        int color = getTemperatureColor(temperature);
+
+        // Определяем иконку (символ)
+        String icon = getTemperatureIcon(temperature);
+
+        // Рендерим иконку температуры
+        renderEffectIcon(graphics, color, tempX, tempY, icon, mc);
+
+        // Текст с температурой
+        String text = String.format("%.1f°C", temperature);
+        graphics.drawString(mc.font, text, tempX + EFFECT_SIZE + 5, tempY + 2, 0xFFFFFFFF, true);
+    }
+
+    /**
+     * Получить цвет для температуры
+     */
+    private static int getTemperatureColor(float temperature) {
+        if (temperature < 35.0f) {
+            return 0x0000FF; // Тёмно-синий (тяжёлая гипотермия)
+        } else if (temperature < 36.0f) {
+            return 0x00AAFF; // Голубой (гипотермия)
+        } else if (temperature >= 36.5f && temperature <= 37.5f) {
+            return 0x00FF00; // Зелёный (норма)
+        } else if (temperature > 38.5f) {
+            return 0xFF0000; // Красный (тяжёлая гипертермия)
+        } else if (temperature > 37.6f) {
+            return 0xFF8800; // Оранжевый (гипертермия)
+        } else {
+            return 0xFFFF00; // Жёлтый (чуть выше нормы)
+        }
+    }
+
+    /**
+     * Получить иконку (символ) для температуры
+     */
+    private static String getTemperatureIcon(float temperature) {
+        if (temperature < 35.0f) {
+            return "❆"; // Холод
+        } else if (temperature < 36.0f) {
+            return "С"; // Снег
+        } else if (temperature >= 36.5f && temperature <= 37.5f) {
+            return "N"; // Normal
+        } else if (temperature > 38.5f) {
+            return "!"; // Критично
+        } else if (temperature > 37.6f) {
+            return "Ж"; // Жара
+        } else {
+            return "~";
+        }
     }
 
     /**

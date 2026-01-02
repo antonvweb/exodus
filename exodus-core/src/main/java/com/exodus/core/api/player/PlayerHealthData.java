@@ -248,21 +248,36 @@ public class PlayerHealthData {
     // ============ КРОВОТЕЧЕНИЕ ============
 
     public void addBleeding(BodyPart part, BleedingType type) {
-        // ✅ Голова НЕ МОЖЕТ кровоточить
         if (part == BodyPart.HEAD) {
             return;
         }
 
-        int duration;
-        if (type.isInfinite()) {
-            duration = INFINITE_DURATION; // Бесконечное
+        // Проверяем есть ли УЖЕ кровотечение
+        if (hasBleeding(part)) {
+            BleedingEffect existing = bleedingEffects.get(part);
+
+            // Усиливаем: берём более сильный тип
+            BleedingType strongerType = getStrongerType(existing.type, type);
+            float newDamage = Math.max(existing.damagePerSecond, type.getRandomDamage());
+
+            // Обновляем длительность (берём INFINITE если хоть один бесконечный)
+            int newDuration = (existing.duration == INFINITE_DURATION || type.isInfinite())
+                    ? INFINITE_DURATION
+                    : Math.max(existing.duration, type.getRandomDuration() * 20);
+
+            bleedingEffects.put(part, new BleedingEffect(newDuration, strongerType, newDamage));
         } else {
-            duration = type.getRandomDuration() * 20; // Секунды → тики
+            // Нет кровотечения - создаём новое
+            int duration = type.isInfinite() ? INFINITE_DURATION : type.getRandomDuration() * 20;
+            bleedingEffects.put(part, new BleedingEffect(duration, type, type.getRandomDamage()));
         }
+    }
 
-        float damage = type.getRandomDamage();
-
-        bleedingEffects.put(part, new BleedingEffect(duration, type, damage));
+    private BleedingType getStrongerType(BleedingType a, BleedingType b) {
+        // STRONG > MEDIUM > WEAK
+        if (a == BleedingType.STRONG || b == BleedingType.STRONG) return BleedingType.STRONG;
+        if (a == BleedingType.MEDIUM || b == BleedingType.MEDIUM) return BleedingType.MEDIUM;
+        return BleedingType.WEAK;
     }
 
     public void removeBleeding(BodyPart part, Player player) {
@@ -299,14 +314,14 @@ public class PlayerHealthData {
     }
 
     // ============ ПЕРЕЛОМ ============
-
     public void addFracture(BodyPart part, float intensity) {
-        // ✅ Голова НЕ МОЖЕТ иметь перелом
-        if (part == BodyPart.HEAD) {
-            return;
+        if (hasFracture(part)) {
+            FractureEffect existing = fractureEffects.get(part);
+            float newIntensity = Math.min(1.0f, existing.intensity + intensity * 0.5f);
+            fractureEffects.put(part, new FractureEffect(INFINITE_DURATION, newIntensity));
+        } else {
+            fractureEffects.put(part, new FractureEffect(INFINITE_DURATION, intensity));
         }
-
-        fractureEffects.put(part, new FractureEffect(INFINITE_DURATION, intensity));
     }
 
     public void removeFracture(BodyPart part, Player player) {

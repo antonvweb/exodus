@@ -9,7 +9,7 @@ import java.lang.reflect.Method;
  * Простая тряска камеры при получении урона - КАК В ВАНИЛЬНОМ МАЙНКРАФТЕ
  * Камера просто немного качается вверх-вниз на короткое время
  */
-public class CameraShake {
+public class DamageShake {
 
     // Параметры тряски
     private static float intensity = 0f;          // Сила тряски (0-1)
@@ -32,8 +32,6 @@ public class CameraShake {
         // Даже маленький урон даёт небольшую тряску
         intensity = Mth.clamp(damage / 10.0f, 0.3f, 1.5f);
         startTime = System.currentTimeMillis();
-
-        System.out.println("=== CAMERA SHAKE! Damage: " + damage + ", Intensity: " + intensity + " ===");
     }
 
     /**
@@ -78,14 +76,12 @@ public class CameraShake {
             if (setRotationMethod == null) {
                 setRotationMethod = Camera.class.getDeclaredMethod("setRotation", float.class, float.class);
                 setRotationMethod.setAccessible(true);
-                System.out.println("=== CAMERA SHAKE: Reflection initialized successfully ===");
             }
 
             // Применяем смещение к pitch (вверх-вниз)
             setRotationMethod.invoke(camera, camera.getYRot(), camera.getXRot() + currentOffset);
 
         } catch (Exception e) {
-            System.err.println("=== CAMERA SHAKE: Reflection failed! ===");
             e.printStackTrace();
             reflectionFailed = true;
         }

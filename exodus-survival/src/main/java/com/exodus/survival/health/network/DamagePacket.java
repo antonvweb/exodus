@@ -11,7 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 public class DamagePacket implements FabricPacket {
 
     public static final PacketType<DamagePacket> TYPE =
-            PacketType.create(new ResourceLocation("exodus-health", "damage"), DamagePacket::new);
+            PacketType.create(new ResourceLocation("exodus-survival", "damage"), DamagePacket::new);
 
     private final float damage;
 

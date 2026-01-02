@@ -4,7 +4,7 @@
   "package": "com.exodus.survival.client.mixin",
   "compatibilityLevel": "JAVA_17",
   "client": [
-    "CameraShakeMixin"
+    "CameraEffectsMixin"
   ],
   "injectors": {
     "defaultRequire": 1
