@@ -1,6 +1,7 @@
 package com.exodus.core;
 
 import com.exodus.core.api.player.*;
+import com.exodus.core.api.player.PlayerHealthData;
 import com.exodus.core.player.health.PlayerHealthComponent;
 import com.exodus.core.player.health.PlayerHealthManager;
 import com.exodus.core.player.stats.PlayerStatsManager;

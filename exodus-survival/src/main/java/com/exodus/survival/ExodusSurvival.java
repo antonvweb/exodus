@@ -1,6 +1,6 @@
 package com.exodus.survival;
 
-import com.exodus.survival.commands.HealthCommand; // ← Добавь импорт
+import com.exodus.survival.commands.HealthCommand;
 import com.exodus.survival.health.effects.StatusEffectManager;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;

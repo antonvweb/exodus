@@ -1,6 +1,5 @@
 package com.exodus.core.player.attributes;
 
-import com.exodus.core.ExodusCoreAPI;
 import com.exodus.core.api.attributes.AttributeModifier;
 import com.exodus.core.api.attributes.AttributeType;
 import com.exodus.core.api.player.PlayerStatsData;

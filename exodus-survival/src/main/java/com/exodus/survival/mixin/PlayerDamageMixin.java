@@ -7,6 +7,7 @@ import com.exodus.core.api.player.BodyPart;
 import com.exodus.core.api.player.PlayerHealthData;
 import com.exodus.core.player.attributes.AttributeManager;
 import com.exodus.survival.health.damage.DeathHandler;
+import com.exodus.survival.health.damage.BodyPartHitboxes;
 import com.exodus.survival.health.damage.HitboxDetection;
 import com.exodus.survival.health.network.DamagePacket;
 import com.exodus.survival.health.network.FracturePacket;
@@ -17,6 +18,8 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -24,15 +27,35 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Mixin для перехвата получения урона игроком
- * Система 6 частей тела + мгновенная смерть от сильного урона
+ * Mixin для перехвата урона игрока
+ *
+ * ОСНОВНЫЕ ИЗМЕНЕНИЯ:
+ * 1. Точные хитбоксы для projectiles
+ * 2. Weighted zones для melee
+ * 3. Убран таймер торса (Tarkov-style: торс = 0 → instant death)
+ * 4. Overflow damage встроен в PlayerHealthData
  */
 @Mixin(Player.class)
 public abstract class PlayerDamageMixin {
 
+    /**
+     * Флаг предотвращения рекурсии при смерти
+     */
     @Unique
     private boolean exodus$isDying = false;
 
+    /**
+     * ГЛАВНЫЙ HOOK: перехват всего урона игрока
+     *
+     * КАК РАБОТАЕТ:
+     * 1. Проверяем абсолютные источники смерти (/kill)
+     * 2. Проверяем мгновенную смерть (взрыв >20 урона)
+     * 3. Определяем часть тела через хитбоксы
+     * 4. Применяем урон на эту часть
+     * 5. Добавляем статусные эффекты
+     * 6. Проверяем смерть
+     * 7. Отменяем ванильный урон
+     */
     @Inject(
             method = "hurt",
             at = @At("HEAD"),
@@ -41,29 +64,35 @@ public abstract class PlayerDamageMixin {
     private void onPlayerHurt(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         Player player = (Player) (Object) this;
 
+        // ========== ПРОПУСКАЕМ НЕКОТОРЫЕ СЛУЧАИ ==========
+
+        // 1. Абсолютные источники смерти (игнорируем систему частей тела)
         if (exodus$isAbsoluteDeath(source)) {
-            return;
+            return; // Пропускаем в ванильную обработку
         }
 
+        // 2. Период неуязвимости
         if (player.invulnerableTime > 0) {
             cir.setReturnValue(false);
             cir.cancel();
             return;
         }
 
+        // 3. Creative или invulnerable
         if (player.isCreative() || player.isInvulnerable()) {
-            return;
+            return; // Пропускаем
         }
 
+        // 4. Предотвращаем рекурсию при смерти
         if (exodus$isDying) {
             return;
         }
 
+        // ========== МГНОВЕННАЯ СМЕРТЬ ОТ ЭКСТРЕМАЛЬНОГО УРОНА ==========
 
-        // ✅ МГНОВЕННАЯ СМЕРТЬ от сильного взрыва в упор (урон > 20)
-        if ((source.is(net.minecraft.world.damagesource.DamageTypes.EXPLOSION) ||
-                source.is(net.minecraft.world.damagesource.DamageTypes.PLAYER_EXPLOSION)) &&
-                amount > 20.0f) {
+        // Сильный взрыв в упор (урон > 20) → instant death
+        if ((source.is(DamageTypes.EXPLOSION) || source.is(DamageTypes.PLAYER_EXPLOSION))
+                && amount > 20.0f) {
 
             player.sendSystemMessage(Component.literal("§c§l💥 Вы были разорваны взрывом!"));
             exodus$isDying = true;
@@ -74,8 +103,8 @@ public abstract class PlayerDamageMixin {
             return;
         }
 
-        // ✅ МГНОВЕННАЯ СМЕРТЬ от падения с огромной высоты (урон > 20)
-        if (source.is(net.minecraft.world.damagesource.DamageTypes.FALL) && amount > 20.0f) {
+        // Падение с огромной высоты (урон > 20) → instant death
+        if (source.is(DamageTypes.FALL) && amount > 20.0f) {
             player.sendSystemMessage(Component.literal("§c§l💀 Вы разбились при падении!"));
             exodus$isDying = true;
             player.hurt(player.damageSources().generic(), 1000.0f);
@@ -85,43 +114,44 @@ public abstract class PlayerDamageMixin {
             return;
         }
 
-        // ✅ ОПРЕДЕЛЯЕМ ЧАСТЬ ТЕЛА КУДА ПОПАЛ УРОН
-        BodyPart hitPart = determineHitBodyPart(amount, source, player);
+        // ========== ОПРЕДЕЛЯЕМ ЧАСТЬ ТЕЛА ==========
 
-        // Наносим урон на эту часть тела
+        BodyPart hitPart = exodus$determineHitBodyPart(source, player, amount);
+
+        // ========== ПРИМЕНЯЕМ УРОН ==========
+
         ExodusCoreAPI.damageBodyPart(player, hitPart, amount);
 
+        // ========== ПРОВЕРЯЕМ СМЕРТЬ ==========
+
         if (!ExodusCoreAPI.isAlive(player)) {
-            player.setHealth(0); // ← ЗДЕСЬ!
+            player.setHealth(0); // Убиваем игрока
             cir.setReturnValue(true);
             cir.cancel();
             return;
         }
 
-        // ✅ Если торс уничтожен - запускаем таймер смерти
-        if (hitPart == BodyPart.TORSO && ExodusCoreAPI.getBodyPartHP(player, BodyPart.TORSO) <= 0) {
-            PlayerHealthData data = ExodusCoreAPI.getHealthData(player);
-            if (!data.isTorsoDestroyed()) {
-                data.startTorsoDeathTimer();
-            }
-        }
+        // ========== ОТПРАВЛЯЕМ ПАКЕТ НА КЛИЕНТ ==========
 
-        // ✅ ОТПРАВЛЯЕМ ПАКЕТ НА КЛИЕНТ
         if (!player.level().isClientSide && player instanceof ServerPlayer serverPlayer) {
             ServerPlayNetworking.send(serverPlayer, new DamagePacket(amount));
         }
 
-        // Отправляем сообщение в чат
-        sendDamageMessage(player, source, amount, hitPart);
+        // ========== СООБЩЕНИЕ В ЧАТ ==========
 
-        // Добавляем статусные эффекты НА ЭТУ ЧАСТЬ ТЕЛА
-        applyStatusEffects(player, source, amount, hitPart);
+        exodus$sendDamageMessage(player, source, amount, hitPart);
 
-        // ✅ Устанавливаем hurtTime
+        // ========== ДОБАВЛЯЕМ СТАТУСНЫЕ ЭФФЕКТЫ ==========
+
+        exodus$applyStatusEffects(player, source, amount, hitPart);
+
+        // ========== УСТАНАВЛИВАЕМ HURT TIME ==========
+
         player.hurtTime = 10;
         player.hurtDuration = 10;
 
-        // ✅ Применяем knockback
+        // ========== KNOCKBACK ==========
+
         Entity attacker = source.getEntity();
         if (attacker != null) {
             double dx = player.getX() - attacker.getX();
@@ -146,77 +176,189 @@ public abstract class PlayerDamageMixin {
             player.hurtMarked = true;
         }
 
-        // ПРОВЕРКА СМЕРТИ
+        // ========== ПРОВЕРКА СМЕРТИ (ПОВТОРНАЯ) ==========
+
         exodus$isDying = true;
-        boolean shouldDie = DeathHandler.checkDeath(player, source);
+        DeathHandler.checkDeath(player, source);
         exodus$isDying = false;
 
-        if (shouldDie) {
-            return;
+        // ========== ПЕРИОД НЕУЯЗВИМОСТИ ========== ⭐ УНИВЕРСАЛЬНАЯ ЛОГИКА
+
+// === ИСКЛЮЧЕНИЯ: Дискретные события БЕЗ атакующего ===
+// Эти типы урона НЕ имеют attacker, но наносятся дискретно (не каждый тик)
+        boolean isDiscreteEvent =
+                source.is(DamageTypes.FALL) ||              // Падение (1 раз)
+                        source.is(DamageTypes.FLY_INTO_WALL) ||     // Элитры в стену (1 раз)
+                        source.is(DamageTypes.EXPLOSION) ||         // Взрыв без источника (1 раз)
+                        source.is(DamageTypes.PLAYER_EXPLOSION) ||  // Взрыв игрока (1 раз)
+                        source.is(DamageTypes.LIGHTNING_BOLT) ||    // Молния (1 раз)
+                        source.is(DamageTypes.STALAGMITE) ||        // Падение на сталагмит (1 раз)
+                        source.is(DamageTypes.FALLING_BLOCK) ||     // Падающий блок (1 раз)
+                        source.is(DamageTypes.FALLING_ANVIL) ||     // Падающая наковальня (1 раз)
+                        source.is(DamageTypes.FALLING_STALACTITE);  // Падающий сталактит (1 раз)
+
+        if (attacker != null || isDiscreteEvent) {
+            // === ДИСКРЕТНЫЙ УРОН ===
+            // - Есть атакующий (моб, игрок, снаряд)
+            // - ИЛИ это разовое событие (падение, взрыв)
+            // → Короткий iframes
+            player.invulnerableTime = 3;
+
+        } else {
+            // === ПОСТОЯННЫЙ УРОН ===
+            // - Нет атакующего И не разовое событие
+            // - Скорее всего: кактус, огонь, куст, лава, кислота (из модов)
+            // → Длинный iframes
+            player.invulnerableTime = 20;
         }
 
-        player.invulnerableTime = 20;
+// ========== ОТМЕНЯЕМ ВАНИЛЬНЫЙ УРОН ==========
 
-        // Отменяем ванильный урон
         cir.setReturnValue(true);
         cir.cancel();
     }
 
+    // ============ ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ============
+
+    /**
+     * Проверить является ли источник урона "абсолютным"
+     * (игнорирует систему частей тела)
+     *
+     * АБСОЛЮТНЫЕ ИСТОЧНИКИ:
+     * - /kill
+     * - Void (падение в пустоту)
+     * - generic_kill
+     */
     @Unique
     private boolean exodus$isAbsoluteDeath(DamageSource source) {
-        return source.is(DamageTypes.GENERIC_KILL);
+        return source.is(DamageTypes.GENERIC_KILL)
+                || source.is(DamageTypes.FELL_OUT_OF_WORLD);
     }
 
     /**
-     * Определить часть тела куда попал урон
+     * КЛЮЧЕВОЙ МЕТОД: определение части тела куда пришел урон
+     *
+     * СТРАТЕГИЯ:
+     * 1. FALL → ноги
+     * 2. EXPLOSION → множественные части (первая = основной урон)
+     * 3. PROJECTILES → точные хитбоксы (AABB)
+     * 4. MELEE → weighted zones
+     * 5. FALLBACK → торс
+     *
+     * @param source Источник урона
+     * @param player Игрок
+     * @param amount Количество урона
+     * @return Часть тела
+     *
+     * Определение части тела куда пришел урон
      */
     @Unique
-    private BodyPart determineHitBodyPart(float amount, DamageSource source, Player player) {
-        // ПАДЕНИЕ - всегда ноги
-        if (source.is(net.minecraft.world.damagesource.DamageTypes.FALL)) {
+    private BodyPart exodus$determineHitBodyPart(DamageSource source, Player player, float amount) {
+
+        // ========== ПАДЕНИЕ ==========
+        if (source.is(DamageTypes.FALL)) {
             return HitboxDetection.getFallBodyPart();
         }
 
-        // ВЗРЫВ - множественные части (берём первую)
-        if (source.is(net.minecraft.world.damagesource.DamageTypes.EXPLOSION) ||
-                source.is(net.minecraft.world.damagesource.DamageTypes.PLAYER_EXPLOSION)) {
+        // ========== ВЗРЫВ ==========
+        if (source.is(DamageTypes.EXPLOSION) || source.is(DamageTypes.PLAYER_EXPLOSION)) {
+            BodyPart[] explosionParts = HitboxDetection.getExplosionBodyParts(amount);
 
-            BodyPart[] parts = HitboxDetection.getExplosionBodyParts();
-            // Наносим урон по всем частям
-            for (int i = 1; i < parts.length; i++) {
-                // Урон по дополнительным частям = % от основного урона
-                float additionalDamage = amount * 0.3f; // 30% от основного
-                ExodusCoreAPI.damageBodyPart(player, parts[i], additionalDamage);
+            for (int i = 1; i < explosionParts.length; i++) {
+                float additionalDamage = amount * 0.3f;
+                ExodusCoreAPI.damageBodyPart(player, explosionParts[i], additionalDamage);
             }
-            return parts[0];
+
+            return explosionParts[0];
         }
 
-        // ОБЫЧНАЯ АТАКА - определяем по хитбоксу
+        // ========== PROJECTILES: ВЫЧИСЛЯЕМ ТОЧКУ ПОПАДАНИЯ ========== ⭐ ИЗМЕНЕНО
+        Entity directEntity = source.getDirectEntity();
+
+        if (directEntity instanceof Projectile projectile) {
+            // Используем специальный метод для снарядов
+            Vec3 projectilePos = projectile.position();
+            return BodyPartHitboxes.detectProjectileHit(player, projectilePos); // ← ИЗМЕНЕНО!
+        }
+
+        // ========== MELEE: WEIGHTED ZONES ==========
         Entity attacker = source.getEntity();
-        return HitboxDetection.detectHitBodyPart(player, attacker);
+
+        if (attacker != null) {
+            return HitboxDetection.detectHitBodyPart(player, attacker, null);
+        }
+
+        // ========== FALLBACK ==========
+        return BodyPart.TORSO;
     }
 
     /**
-     * Наложение статусных эффектов на конкретную часть тела
-     * С ЛИМИТАМИ: максимум 3 кровотечения, максимум 2 перелома
+     * Отправить сообщение о получении урона в чат игрока
+     *
+     * ФОРМАТ:
+     * [Урон] Зомби нанёс 8.5 урона по Левой ноге
      */
     @Unique
-    private void applyStatusEffects(Player player, DamageSource source, float damage, BodyPart hitPart) {
+    private void exodus$sendDamageMessage(Player player, DamageSource source, float damage, BodyPart hitPart) {
+        String sourceName = exodus$getDamageSourceName(source);
+        String damageText = String.format("%.1f", damage);
 
-        // ✅ ГОЛОВА НЕ МОЖЕТ ИМЕТЬ ЭФФЕКТЫ
+        String message = "§c[Урон] §7" + sourceName + " нанёс §c" + damageText
+                + " §7урона по §e" + hitPart.getDisplayName().toLowerCase();
+
+        player.sendSystemMessage(Component.literal(message));
+    }
+
+    /**
+     * Получить название источника урона
+     */
+    @Unique
+    private String exodus$getDamageSourceName(DamageSource source) {
+        Entity attacker = source.getEntity();
+
+        if (attacker != null) {
+            return attacker.getDisplayName().getString();
+        }
+
+        if (source.is(DamageTypes.FALL)) return "Падение";
+        if (source.is(DamageTypes.DROWN)) return "Утопление";
+        if (source.is(DamageTypes.IN_FIRE) || source.is(DamageTypes.ON_FIRE)) return "Огонь";
+        if (source.is(DamageTypes.LAVA)) return "Лава";
+        if (source.is(DamageTypes.STARVE)) return "Голод";
+        if (source.is(DamageTypes.EXPLOSION) || source.is(DamageTypes.PLAYER_EXPLOSION)) return "Взрыв";
+
+        return "Неизвестный источник";
+    }
+
+    /**
+     * Применить статусные эффекты на часть тела
+     *
+     * ЛИМИТЫ (как в Tarkov):
+     * - Максимум 3 кровотечения одновременно
+     * - Максимум 2 перелома одновременно
+     *
+     * ПРАВИЛА:
+     * - Голова НЕ получает эффекты
+     * - Кровотечение зависит от урона
+     * - Перелом зависит от урона
+     */
+    @Unique
+    private void exodus$applyStatusEffects(Player player, DamageSource source, float damage, BodyPart hitPart) {
+
+        // Голова НЕ получает эффекты
         if (hitPart == BodyPart.HEAD) {
             return;
         }
 
-        // ✅ Подсчитываем текущие эффекты
-        int currentBleedings = countActiveEffects(player, "bleeding");
-        int currentFractures = countActiveEffects(player, "fracture");
+        // Подсчитываем текущие эффекты
+        int currentBleedings = exodus$countActiveEffects(player, "bleeding");
+        int currentFractures = exodus$countActiveEffects(player, "fracture");
 
         // ========== ПАДЕНИЕ ==========
-        if (source.is(net.minecraft.world.damagesource.DamageTypes.FALL)) {
-            // При сильном падении (>5 урона) - перелом НОГ
+        if (source.is(DamageTypes.FALL)) {
+            // Сильное падение (>5 урона) → перелом ног
             if (damage > 5.0f && currentFractures < 2) {
-                float fractureChance = (float) (damage > 10.0f ? 1.0 : 0.5);
+                float fractureChance = damage > 10.0f ? 1.0f : 0.5f;
                 float resistance = AttributeManager.getValue(player, AttributeType.FRACTURE_RESISTANCE);
                 float finalChance = fractureChance * (1.0f - resistance);
 
@@ -224,118 +366,117 @@ public abstract class PlayerDamageMixin {
                     float intensity = Math.min(1.0f, damage / 20.0f);
 
                     // Перелом той ноги куда попал урон
-                    addFractureWithPain(player, hitPart, intensity);
+                    exodus$addFractureWithPain(player, hitPart, intensity);
                     currentFractures++;
 
-                    float secondFractureChance = (float) (damage > 15.0f ? 0.3 : 0.2);
-                    float finalSecondChance = secondFractureChance * (1.0f - resistance);
+                    // Шанс перелома второй ноги при очень сильном падении
+                    if (damage > 15.0f && currentFractures < 2) {
+                        float secondChance = (damage > 20.0f ? 0.3f : 0.2f) * (1.0f - resistance);
 
-                    if (Math.random() < finalSecondChance && currentFractures < 2) {
-                        BodyPart otherLeg = hitPart == BodyPart.LEFT_LEG ?
-                                BodyPart.RIGHT_LEG : BodyPart.LEFT_LEG;
-                        addFractureWithPain(player, otherLeg, intensity);
+                        if (Math.random() < secondChance) {
+                            BodyPart otherLeg = hitPart == BodyPart.LEFT_LEG
+                                    ? BodyPart.RIGHT_LEG
+                                    : BodyPart.LEFT_LEG;
+                            exodus$addFractureWithPain(player, otherLeg, intensity);
+                        }
                     }
                 }
             }
+            return; // Падение не вызывает кровотечение
         }
 
-        // ========== АТАКА МОБА ==========
+        // ========== АТАКА МОБА/ИГРОКА ==========
         Entity attacker = source.getEntity();
-        if (attacker != null && !source.is(net.minecraft.world.damagesource.DamageTypes.EXPLOSION)) {
 
-            // ✅ Шанс кровотечения зависит от урона И лимита
+        if (attacker != null && !source.is(DamageTypes.EXPLOSION)) {
+
+            // === КРОВОТЕЧЕНИЕ ===
             if (currentBleedings < 3) {
                 float bleedingChance;
 
                 if (damage < 4.0f) {
-                    bleedingChance = 0.2f;  // 20% при слабом уроне
+                    bleedingChance = 0.2f;      // 20% слабый урон
                 } else if (damage < 8.0f) {
-                    bleedingChance = 0.4f;  // 40% при среднем уроне
+                    bleedingChance = 0.4f;      // 40% средний
                 } else {
-                    bleedingChance = 0.6f;  // 60% при сильном уроне
+                    bleedingChance = 0.6f;      // 60% сильный
                 }
 
                 float resistance = AttributeManager.getValue(player, AttributeType.BLEED_RESISTANCE);
                 float finalChance = bleedingChance * (1.0f - resistance);
 
                 if (Math.random() < finalChance) {
-                    // Тип кровотечения зависит от урона
                     BleedingType type;
+
                     if (damage < 5.0f) {
-                        type = BleedingType.WEAK;      // Слабое
+                        type = BleedingType.WEAK;
                     } else if (damage < 10.0f) {
-                        type = BleedingType.MEDIUM;    // Среднее
+                        type = BleedingType.MEDIUM;
                     } else {
-                        type = BleedingType.STRONG;    // Сильное (БЕСКОНЕЧНОЕ!)
+                        type = BleedingType.STRONG; // Бесконечное!
                     }
 
-                    addBleedingWithPain(player, hitPart, type);
+                    exodus$addBleedingWithPain(player, hitPart, type);
                 }
             }
 
-            if(currentFractures < 2){
-              float fractureChance;
+            // === ПЕРЕЛОМ ===
+            if (currentFractures < 2) {
+                float fractureChance;
 
-              if (damage < 8.0f) {
-                fractureChance = 0.1f;  // 20% при слабом уроне
-              } else if (damage < 12.0f) {
-                fractureChance = 0.2f;  // 40% при среднем уроне
-              } else {
-                fractureChance = 0.4f;  // 60% при сильном уроне
-              }
+                if (damage < 8.0f) {
+                    fractureChance = 0.1f;      // 10%
+                } else if (damage < 12.0f) {
+                    fractureChance = 0.2f;      // 20%
+                } else {
+                    fractureChance = 0.4f;      // 40%
+                }
 
-              float resistance = AttributeManager.getValue(player, AttributeType.FRACTURE_RESISTANCE);
-              float finalChance = fractureChance * (1.0f - resistance);
+                float resistance = AttributeManager.getValue(player, AttributeType.FRACTURE_RESISTANCE);
+                float finalChance = fractureChance * (1.0f - resistance);
 
                 if (Math.random() < finalChance) {
                     float intensity = Math.min(1.0f, damage / 20.0f);
-
-                    addFractureWithPain(player, hitPart, intensity);
-                    currentFractures++;
+                    exodus$addFractureWithPain(player, hitPart, intensity);
                 }
             }
         }
 
         // ========== ВЗРЫВ ==========
-        if (source.is(net.minecraft.world.damagesource.DamageTypes.EXPLOSION) ||
-                source.is(net.minecraft.world.damagesource.DamageTypes.PLAYER_EXPLOSION)) {
+        if (source.is(DamageTypes.EXPLOSION) || source.is(DamageTypes.PLAYER_EXPLOSION)) {
 
             float intensity = Math.min(1.0f, damage / 15.0f);
 
-            // Взрыв бьёт по нескольким частям
-            BodyPart[] explosionParts = HitboxDetection.getExplosionBodyParts();
+            // Взрыв бьет по нескольким частям → эффекты более строгие
+            BodyPart[] explosionParts = HitboxDetection.getExplosionBodyParts(damage);
 
-            // ✅ Более строгий баланс для взрыва
             int bleedingsAdded = 0;
             int fracturesAdded = 0;
 
             for (BodyPart part : explosionParts) {
-                // Пропускаем голову
-                if (part == BodyPart.HEAD) {
-                    continue;
-                }
+                if (part == BodyPart.HEAD) continue;
 
-                // ✅ Кровотечение: только если < 3 и с шансом зависящим от урона
+                // Кровотечение
                 if (currentBleedings + bleedingsAdded < 3) {
-                    float bleedingChance = damage < 10.0f ? 0.4f : 0.6f; // 40-60%
+                    float bleedChance = (damage < 10.0f ? 0.4f : 0.6f);
                     float resistance = AttributeManager.getValue(player, AttributeType.BLEED_RESISTANCE);
-                    float finalChance = bleedingChance * (1.0f - resistance);
+                    float finalChance = bleedChance * (1.0f - resistance);
 
                     if (Math.random() < finalChance) {
                         BleedingType type = damage > 15.0f ? BleedingType.STRONG : BleedingType.MEDIUM;
-                        addBleedingWithPain(player, part, type);
+                        exodus$addBleedingWithPain(player, part, type);
                         bleedingsAdded++;
                     }
                 }
 
-                // ✅ Перелом: только если < 2 и с шансом зависящим от урона
+                // Перелом
                 if (currentFractures + fracturesAdded < 2) {
-                    float fractureChance = damage < 10.0f ? 0.3f : 0.5f; // 30-50%
+                    float fracChance = (damage < 10.0f ? 0.3f : 0.5f);
                     float resistance = AttributeManager.getValue(player, AttributeType.FRACTURE_RESISTANCE);
-                    float finalChance = fractureChance * (1.0f - resistance);
+                    float finalChance = fracChance * (1.0f - resistance);
 
                     if (Math.random() < finalChance) {
-                        addFractureWithPain(player, part, intensity);
+                        exodus$addFractureWithPain(player, part, intensity);
                         fracturesAdded++;
                     }
                 }
@@ -347,27 +488,20 @@ public abstract class PlayerDamageMixin {
      * Добавить кровотечение С учётом боли и резистов
      */
     @Unique
-    private void addBleedingWithPain(Player player, BodyPart part, BleedingType type) {
-        // 1. Добавляем кровотечение (БЕЗ автоматической боли)
+    private void exodus$addBleedingWithPain(Player player, BodyPart part, BleedingType type) {
+        // 1. Добавляем кровотечение
         ExodusCoreAPI.addBleeding(player, part, type);
 
-        // 2. Если кровотечение вызывает боль - добавляем вручную
+        // 2. Если вызывает боль → добавляем боль
         if (type.causesPain()) {
-            // Базовая интенсивность
             float basePainIntensity = 0.6f;
-
-            // Резист боли
             float painResist = AttributeManager.getValue(player, AttributeType.PAIN_RESISTANCE);
-
-            // Финальная интенсивность
             float finalPainIntensity = basePainIntensity * (1.0f - painResist);
 
-            // Длительность
-            int duration = type.isInfinite() ?
-                    PlayerHealthData.INFINITE_DURATION :
-                    type.getRandomDuration() * 20;
+            int duration = type.isInfinite()
+                    ? PlayerHealthData.INFINITE_DURATION
+                    : type.getRandomDuration() * 20;
 
-            // Добавляем боль
             ExodusCoreAPI.addPain(player, duration, finalPainIntensity);
         }
     }
@@ -376,11 +510,11 @@ public abstract class PlayerDamageMixin {
      * Добавить перелом С учётом боли и резистов
      */
     @Unique
-    private void addFractureWithPain(Player player, BodyPart part, float intensity) {
-        // 1. Добавляем перелом (БЕЗ автоматической боли)
+    private void exodus$addFractureWithPain(Player player, BodyPart part, float intensity) {
+        // 1. Добавляем перелом
         ExodusCoreAPI.addFracture(player, part, intensity);
 
-        // ✅ ОТПРАВЛЯЕМ ПАКЕТ НА КЛИЕНТ ДЛЯ ЗВУКА ПЕРЕЛОМА
+        // 2. Отправляем пакет на клиент для звука
         if (!player.level().isClientSide && player instanceof ServerPlayer serverPlayer) {
             ServerPlayNetworking.send(
                     serverPlayer,
@@ -388,7 +522,7 @@ public abstract class PlayerDamageMixin {
             );
         }
 
-        // 2. Вычисляем боль от перелома
+        // 3. Добавляем боль от перелома
         float basePainIntensity = intensity * 0.8f;
         float painResist = AttributeManager.getValue(player, AttributeType.PAIN_RESISTANCE);
         float finalPainIntensity = basePainIntensity * (1.0f - painResist);
@@ -397,10 +531,10 @@ public abstract class PlayerDamageMixin {
     }
 
     /**
-     * Подсчитать активные эффекты
+     * Подсчитать активные эффекты (для лимитов)
      */
     @Unique
-    private int countActiveEffects(Player player, String effectType) {
+    private int exodus$countActiveEffects(Player player, String effectType) {
         PlayerHealthData data = ExodusCoreAPI.getHealthData(player);
         int count = 0;
 
@@ -413,41 +547,5 @@ public abstract class PlayerDamageMixin {
         }
 
         return count;
-    }
-
-    @Unique
-    private void sendDamageMessage(Player player, DamageSource source, float damage, BodyPart hitPart) {
-        String sourceName = getDamageSourceName(source);
-        String damageText = String.format("%.1f", damage);
-        String message = "§c[Урон] §7" + sourceName + " нанёс §c" + damageText +
-                " §7урона по §e" + hitPart.getDisplayName().toLowerCase();
-        player.sendSystemMessage(Component.literal(message));
-    }
-
-    @Unique
-    private String getDamageSourceName(DamageSource source) {
-        Entity attacker = source.getEntity();
-
-        if (attacker != null) {
-            return attacker.getDisplayName().getString();
-        }
-
-        if (source.is(net.minecraft.world.damagesource.DamageTypes.FALL)) {
-            return "Падение";
-        } else if (source.is(net.minecraft.world.damagesource.DamageTypes.DROWN)) {
-            return "Утопление";
-        } else if (source.is(net.minecraft.world.damagesource.DamageTypes.IN_FIRE) ||
-                source.is(net.minecraft.world.damagesource.DamageTypes.ON_FIRE)) {
-            return "Огонь";
-        } else if (source.is(net.minecraft.world.damagesource.DamageTypes.LAVA)) {
-            return "Лава";
-        } else if (source.is(net.minecraft.world.damagesource.DamageTypes.STARVE)) {
-            return "Голод";
-        } else if (source.is(net.minecraft.world.damagesource.DamageTypes.EXPLOSION) ||
-                source.is(net.minecraft.world.damagesource.DamageTypes.PLAYER_EXPLOSION)) {
-            return "Взрыв";
-        }
-
-        return "Неизвестный источник";
     }
 }

@@ -125,23 +125,6 @@ public class HealthCommand {
             player.sendSystemMessage(Component.literal(text));
         }
 
-        // === ТАЙМЕР ТОРСА ===
-        if (data.isTorsoDestroyed()) {
-            player.sendSystemMessage(Component.literal(""));
-            player.sendSystemMessage(Component.literal("§4§l⚠ КРИТИЧЕСКОЕ СОСТОЯНИЕ ТОРСА!"));
-
-            int timeLeft = data.getTorsoTimeLeft();
-            int minutes = timeLeft / 60;
-            int seconds = timeLeft % 60;
-
-            String timeText = String.format("§c  Осталось времени: §f%d:%02d", minutes, seconds);
-            player.sendSystemMessage(Component.literal(timeText));
-
-            float deathChance = data.getTorsoDeathChance() * 100;
-            String chanceText = String.format("§c  Шанс смерти: §f%.1f%%", deathChance);
-            player.sendSystemMessage(Component.literal(chanceText));
-        }
-
         // === ИТОГ ===
         player.sendSystemMessage(Component.literal(""));
 

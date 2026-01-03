@@ -5,26 +5,29 @@ import com.exodus.core.player.attributes.AttributeManager;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
- * Данные здоровья игрока - система 6 частей тела
- * Упрощённая механика смерти + переливание урона от кровотечения
+ * Данные здоровья игрока - Tarkov-style система
+ *
+ * КЛЮЧЕВЫЕ МЕХАНИКИ:
+ * 1. Head/Torso = 0 HP → instant death
+ * 2. Конечности = 0 HP → "blacked" (дебафы + overflow damage)
+ * 3. Overflow damage: урон по черной части распределяется на живые
+ * 4. Кровотечение: урон идет на ТУ ЖЕ часть (может вызвать overflow)
  */
 public class PlayerHealthData {
 
-    // Специальное значение для бесконечной длительности
     public static final int INFINITE_DURATION = -1;
 
-    // ============ HP ДЛЯ КАЖДОЙ ЧАСТИ ТЕЛА ============
+    // ============ HP ЧАСТЕЙ ТЕЛА ============
     private final Map<BodyPart, Float> bodyPartHP;
 
-    // ============ ЭФФЕКТЫ НА КОНКРЕТНЫЕ ЧАСТИ ТЕЛА ============
+    // ============ ЭФФЕКТЫ НА ЧАСТИ ============
     private final Map<BodyPart, BleedingEffect> bleedingEffects;
     private final Map<BodyPart, FractureEffect> fractureEffects;
 
-    // Боль: ГЛОБАЛЬНЫЙ эффект
+    // Боль: глобальный эффект
     private int painDuration;
     private float painIntensity;
 
@@ -33,7 +36,7 @@ public class PlayerHealthData {
         this.bleedingEffects = new HashMap<>();
         this.fractureEffects = new HashMap<>();
 
-        // Инициализируем HP для всех частей тела
+        // Инициализируем HP
         for (BodyPart part : BodyPart.values()) {
             bodyPartHP.put(part, part.getMaxHP());
         }
@@ -42,14 +45,16 @@ public class PlayerHealthData {
         this.painIntensity = 0f;
     }
 
+    // ============ ИНИЦИАЛИЗАЦИЯ С УЧЕТОМ АТРИБУТОВ ============
+
     /**
-     * Инициализировать HP с учётом атрибутов игрока
-     * Вызывается ОДИН РАЗ при входе игрока в мир
+     * Инициализировать HP с учётом атрибутов (CON влияет на макс HP)
+     * Вызывается при входе в мир
      */
     public void initializeHP(Player player) {
         for (BodyPart part : BodyPart.values()) {
             float maxHP = getMaxBodyPartHP(part, player);
-            bodyPartHP.put(part, maxHP); // Полное HP
+            bodyPartHP.put(part, maxHP);
         }
     }
 
@@ -59,161 +64,203 @@ public class PlayerHealthData {
         return bodyPartHP.getOrDefault(part, 0f);
     }
 
-    public float getMaxBodyPartHP(BodyPart part, Player player){
-        float baseMax = part.getMaxHP(); // Базовое (35, 85, etc)
+    /**
+     * Получить максимальный HP части с учетом атрибутов
+     */
+    public float getMaxBodyPartHP(BodyPart part, Player player) {
+        float baseMax = part.getMaxHP();
         float multiplier = AttributeManager.getValue(player, AttributeType.MAX_HEALTH_MULTIPLIER);
         return baseMax * multiplier;
     }
 
-    public float getFullHp(Player player){
-        float resultHp = 0f;
-        for (Map.Entry<BodyPart, Float> hp : bodyPartHP.entrySet()) {
-           resultHp += getBodyPartHPPercentage(hp.getKey(), player);
-        }
-
-        return resultHp / 6;
-    }
-
+    /**
+     * Установить HP части тела
+     */
     public void setBodyPartHP(BodyPart part, float hp, Player player) {
-        bodyPartHP.put(part, Math.max(0, Math.min(getMaxBodyPartHP(part, player), hp)));
+        float max = getMaxBodyPartHP(part, player);
+        bodyPartHP.put(part, Math.max(0, Math.min(max, hp)));
     }
 
+    /**
+     * ОСНОВНОЙ МЕТОД УРОНА - Tarkov-style
+     *
+     * КАК РАБОТАЕТ:
+     * 1. Если часть жива (HP > 0) → обычный урон
+     * 2. Если часть мертва (HP = 0) → overflow damage!
+     * 3. Overflow: урон * multiplier → на другие части
+     *
+     * @param part Часть тела куда пришел урон
+     * @param damage Количество урона
+     * @param player Игрок
+     */
     public void damageBodyPart(BodyPart part, float damage, Player player) {
         float currentHP = getBodyPartHP(part);
-        setBodyPartHP(part, currentHP - damage, player);
+
+        // ========== СЛУЧАЙ 1: ЧАСТЬ ЖИВА ==========
+        if (currentHP > 0) {
+            float newHP = currentHP - damage;
+            setBodyPartHP(part, newHP, player);
+
+            // Проверяем: стала ли часть черной?
+            if (newHP <= 0) {
+                onLimbBlacked(part, player);
+            }
+
+            return;
+        }
+
+        // ========== СЛУЧАЙ 2: ЧАСТЬ УЖЕ ЧЕРНАЯ (BLACKED) ==========
+        // Это overflow damage!
+
+        // Проверка безопасности: критические части не должны быть живы с 0 HP
+        if (part == BodyPart.HEAD || part == BodyPart.TORSO) {
+            // Это означает что игрок должен быть мертв
+            // Но на всякий случай просто игнорируем
+            return;
+        }
+
+        // Применяем overflow damage
+        applyOverflowDamage(part, damage, player);
     }
 
+    /**
+     * Overflow Damage - TARKOV МЕХАНИКА
+     *
+     * Урон по черной конечности распределяется на живые части
+     *
+     * ПРАВИЛА:
+     * 1. Урон умножается на multiplier (1.5x по умолчанию)
+     * 2. Распределяется ТОЛЬКО на живые конечности (не голову/торс!)
+     * 3. Если ВСЕ конечности черные → урон идет на торс
+     *
+     * @param blackedPart Черная часть по которой пришел урон
+     * @param damage Изначальный урон
+     * @param player Игрок
+     */
+    private void applyOverflowDamage(BodyPart blackedPart, float damage, Player player) {
+        // === ШАГ 1: Применяем множитель ===
+        // В Tarkov это 0.7x - 2.0x в зависимости от части
+        // Мы используем универсальный 1.5x (можно балансировать)
+        float multiplier = 1.5f;
+        float totalOverflowDamage = damage * multiplier;
+
+        // === ШАГ 2: Находим живые конечности ===
+        List<BodyPart> aliveLimbs = new ArrayList<>();
+
+        for (BodyPart part : BodyPart.values()) {
+            // Пропускаем критические части (голова/торс)
+            if (part == BodyPart.HEAD || part == BodyPart.TORSO) {
+                continue;
+            }
+
+            // Пропускаем черные конечности
+            if (getBodyPartHP(part) <= 0) {
+                continue;
+            }
+
+            aliveLimbs.add(part);
+        }
+
+        // === ШАГ 3: Распределяем урон ===
+
+        // Если НЕТ живых конечностей → урон идет на торс!
+        if (aliveLimbs.isEmpty()) {
+            // Это критическая ситуация: все конечности черные
+            // Overflow бьет по торсу → вероятно приведет к смерти
+            damageBodyPart(BodyPart.TORSO, totalOverflowDamage, player);
+            return;
+        }
+
+        // Есть живые конечности → делим урон поровну
+        float damagePerLimb = totalOverflowDamage / aliveLimbs.size();
+
+        for (BodyPart limb : aliveLimbs) {
+            // Рекурсивно вызываем damageBodyPart
+            // Это позволяет цепочке overflow работать корректно
+            damageBodyPart(limb, damagePerLimb, player);
+        }
+    }
+
+    /**
+     * Callback когда конечность становится черной (HP = 0)
+     *
+     * АВТОМАТИЧЕСКИЕ ЭФФЕКТЫ:
+     * - Конечность → автоматический перелом (максимальная интенсивность)
+     * - Можно добавить звук, визуальный эффект
+     */
+    private void onLimbBlacked(BodyPart part, Player player) {
+        // Только для конечностей (не голова/торс)
+        if (part == BodyPart.LEFT_ARM || part == BodyPart.RIGHT_ARM ||
+                part == BodyPart.LEFT_LEG || part == BodyPart.RIGHT_LEG) {
+
+            // Автоматический перелом черной конечности
+            addFracture(part, 1.0f); // Максимальная интенсивность
+        }
+    }
+
+    /**
+     * Восстановить HP части тела
+     */
     public void healBodyPart(BodyPart part, float amount, Player player) {
         float currentHP = getBodyPartHP(part);
         setBodyPartHP(part, currentHP + amount, player);
-
-        // ✅ Если вылечили торс (HP > 0) - отменяем таймер смерти
-        if (part == BodyPart.TORSO && currentHP <= 0 && getBodyPartHP(part) > 0) {
-            cancelTorsoDeathTimer();
-        }
     }
 
+    /**
+     * Получить процент HP части
+     */
     public float getBodyPartHPPercentage(BodyPart part, Player player) {
         float current = getBodyPartHP(part);
         float max = getMaxBodyPartHP(part, player);
         return max > 0 ? Math.max(0f, Math.min(1f, current / max)) : 0f;
     }
 
+    /**
+     * Получить визуальное состояние части (для текстур)
+     */
     public BodyPart.BodyPartState getBodyPartState(BodyPart part, Player player) {
         return part.getState(getBodyPartHPPercentage(part, player));
     }
 
-    // ============ ТАЙМЕР ТОРСА (ВНУТРЕННИЙ) ============
-
-    private boolean torsoDestroyed = false;
-    private int torsoDeathTimer = 0;        // Оставшееся время (в тиках)
-    private int torsoDeathDuration = 0;     // Общая длительность таймера
-
     /**
-     * Запустить таймер смерти торса
-     * 20-30 минут случайно
+     * Получить общий процент HP игрока
+     * (среднее по всем частям)
      */
-    public void startTorsoDeathTimer() {
-        if (!torsoDestroyed) {
-            torsoDestroyed = true;
-            // 20-30 минут = 24000-36000 тиков
-            torsoDeathDuration = 24000 + (int)(Math.random() * 12000);
-            torsoDeathTimer = torsoDeathDuration;
+    public float getFullHp(Player player) {
+        float totalPercentage = 0f;
+
+        for (BodyPart part : BodyPart.values()) {
+            totalPercentage += getBodyPartHPPercentage(part, player);
         }
+
+        return totalPercentage / BodyPart.values().length;
     }
+
+    // ============ ПРОВЕРКА ЖИЗНИ (TARKOV LOGIC) ============
 
     /**
-     * Отменить таймер торса (если вылечили)
-     */
-    public void cancelTorsoDeathTimer() {
-        if (torsoDestroyed) {
-            torsoDestroyed = false;
-            torsoDeathTimer = 0;
-            torsoDeathDuration = 0;
-        }
-    }
-
-    /**
-     * Обновить таймер торса
-     */
-    public void tickTorsoDeathTimer() {
-        if (torsoDestroyed && torsoDeathTimer > 0) {
-            torsoDeathTimer--;
-        }
-    }
-
-    /**
-     * Получить шанс смерти от торса (0.0 - 1.0)
-     * Прогрессирующий шанс в последние 5 минут
-     */
-    public float getTorsoDeathChance() {
-        if (!torsoDestroyed || torsoDeathTimer > 6000) { // > 5 минут
-            return 0f;
-        }
-
-        if (torsoDeathTimer <= 0) {
-            return 1.0f; // 100% смерть
-        }
-
-        // Последние 5 минут: прогрессирующий шанс
-        // 5:00 → 1%, 4:00 → 2%, 3:00 → 5%, 2:00 → 10%, 1:00 → 20%, 0:30 → 50%
-        int secondsLeft = torsoDeathTimer / 20;
-
-        if (secondsLeft > 240) {      // 5:00-4:01
-            return 0.01f;
-        } else if (secondsLeft > 180) { // 4:00-3:01
-            return 0.02f;
-        } else if (secondsLeft > 120) { // 3:00-2:01
-            return 0.05f;
-        } else if (secondsLeft > 60) {  // 2:00-1:01
-            return 0.10f;
-        } else if (secondsLeft > 30) {  // 1:00-0:31
-            return 0.20f;
-        } else {                        // 0:30-0:00
-            return 0.50f;
-        }
-    }
-
-    public boolean isTorsoDestroyed() {
-        return torsoDestroyed;
-    }
-
-    public int getTorsoTimeLeft() {
-        return torsoDeathTimer / 20; // В секундах
-    }
-
-    // ============ ПРОВЕРКА ЖИЗНИ ============
-
-    /**
-     * Проверить жив ли игрок
+     * Жив ли игрок?
      *
-     * ПРАВИЛА СМЕРТИ:
-     * 1. Голова = 0 HP → мгновенная смерть
-     * 2. Торс = 0 HP → таймер 20-30 мин, потом прогрессирующий шанс смерти
-     * 3. ВСЕ части = 0 HP → смерть
+     * ПРАВИЛА СМЕРТИ (КАК В TARKOV):
+     * 1. HEAD = 0 HP → instant death
+     * 2. TORSO = 0 HP → instant death
+     * 3. Все конечности = 0 HP → жив (но парализован)
+     *
+     * @return true если жив, false если мертв
      */
     public boolean isAlive() {
-        // 1. Голова = 0 → смерть
+        // 1. Голова = 0 → мгновенная смерть
         if (getBodyPartHP(BodyPart.HEAD) <= 0) {
             return false;
         }
 
-        // 2. Торс = 0 → проверяем таймер
-        if (torsoDestroyed && torsoDeathTimer <= 0) {
-            return false; // Таймер истёк
-        }
-
-        // 3. Все части тела = 0 → смерть
-        boolean allDestroyed = true;
-        for (BodyPart part : BodyPart.values()) {
-            if (getBodyPartHP(part) > 0) {
-                allDestroyed = false;
-                break;
-            }
-        }
-        if (allDestroyed) {
+        // 2. Торс = 0 → мгновенная смерть (как в Tarkov!)
+        if (getBodyPartHP(BodyPart.TORSO) <= 0) {
             return false;
         }
+
+        // 3. Конечности = 0 → жив, но с дебафами
+        // (не приводит к автоматической смерти)
 
         return true;
     }
@@ -226,19 +273,8 @@ public class PlayerHealthData {
             return DeathCause.HEAD_DESTROYED;
         }
 
-        if (torsoDestroyed && torsoDeathTimer <= 0) {
-            return DeathCause.TORSO_FAILURE;
-        }
-
-        boolean allDestroyed = true;
-        for (BodyPart part : BodyPart.values()) {
-            if (getBodyPartHP(part) > 0) {
-                allDestroyed = false;
-                break;
-            }
-        }
-        if (allDestroyed) {
-            return DeathCause.ALL_BODY_DESTROYED;
+        if (getBodyPartHP(BodyPart.TORSO) <= 0) {
+            return DeathCause.TORSO_DESTROYED; // Instant death!
         }
 
         return DeathCause.UNKNOWN;
@@ -246,52 +282,51 @@ public class PlayerHealthData {
 
     public enum DeathCause {
         HEAD_DESTROYED,        // Голова уничтожена
-        TORSO_FAILURE,         // Отказ внутренних органов (таймер торса)
-        ALL_BODY_DESTROYED,    // Все части уничтожены
-        BLEEDING,              // Истёк кровью
-        EXPLOSION,             // Сильный взрыв в упор
-        FALL,                  // Падение с большой высоты
-        UNKNOWN                // Неизвестная причина
+        TORSO_DESTROYED,       // Торс уничтожен (instant death!)
+        BLEEDING,              // Истёк кровью (через overflow на торс)
+        EXPLOSION,             // Сильный взрыв
+        FALL,                  // Падение с высоты
+        UNKNOWN
     }
 
     // ============ КРОВОТЕЧЕНИЕ ============
 
+    /**
+     * Добавить кровотечение на часть тела
+     */
     public void addBleeding(BodyPart part, BleedingType type) {
         if (part == BodyPart.HEAD) {
-            return;
+            return; // Голова не кровоточит
         }
 
-        // Проверяем есть ли УЖЕ кровотечение
+        // Проверяем есть ли уже кровотечение
         if (hasBleeding(part)) {
             BleedingEffect existing = bleedingEffects.get(part);
 
-            // Усиливаем: берём более сильный тип
+            // Усиливаем: берем более сильный тип
             BleedingType strongerType = getStrongerType(existing.type, type);
             float newDamage = Math.max(existing.damagePerSecond, type.getRandomDamage());
 
-            // Обновляем длительность (берём INFINITE если хоть один бесконечный)
+            // Обновляем длительность
             int newDuration = (existing.duration == INFINITE_DURATION || type.isInfinite())
                     ? INFINITE_DURATION
                     : Math.max(existing.duration, type.getRandomDuration() * 20);
 
             bleedingEffects.put(part, new BleedingEffect(newDuration, strongerType, newDamage));
         } else {
-            // Нет кровотечения - создаём новое
+            // Новое кровотечение
             int duration = type.isInfinite() ? INFINITE_DURATION : type.getRandomDuration() * 20;
             bleedingEffects.put(part, new BleedingEffect(duration, type, type.getRandomDamage()));
         }
     }
 
-    private BleedingType getStrongerType(BleedingType a, BleedingType b) {
-        // STRONG > MEDIUM > WEAK
-        if (a == BleedingType.STRONG || b == BleedingType.STRONG) return BleedingType.STRONG;
-        if (a == BleedingType.MEDIUM || b == BleedingType.MEDIUM) return BleedingType.MEDIUM;
-        return BleedingType.WEAK;
-    }
-
+    /**
+     * Убрать кровотечение
+     */
     public void removeBleeding(BodyPart part, Player player) {
         BleedingEffect effect = bleedingEffects.remove(part);
 
+        // Если кровотечение вызывало боль → оставляем боль на некоторое время
         if (effect != null && effect.type.causesPain()) {
             int painAfter = effect.type.getPainDurationAfter() * 20;
 
@@ -305,10 +340,7 @@ public class PlayerHealthData {
 
     public boolean hasBleeding(BodyPart part) {
         BleedingEffect effect = bleedingEffects.get(part);
-        if (effect == null) {
-            return false;
-        }
-        // Бесконечное или ещё не кончилось
+        if (effect == null) return false;
         return effect.duration == INFINITE_DURATION || effect.duration > 0;
     }
 
@@ -322,7 +354,14 @@ public class PlayerHealthData {
         return effect != null ? effect.damagePerSecond : 0f;
     }
 
+    private BleedingType getStrongerType(BleedingType a, BleedingType b) {
+        if (a == BleedingType.STRONG || b == BleedingType.STRONG) return BleedingType.STRONG;
+        if (a == BleedingType.MEDIUM || b == BleedingType.MEDIUM) return BleedingType.MEDIUM;
+        return BleedingType.WEAK;
+    }
+
     // ============ ПЕРЕЛОМ ============
+
     public void addFracture(BodyPart part, float intensity) {
         if (hasFracture(part)) {
             FractureEffect existing = fractureEffects.get(part);
@@ -349,7 +388,7 @@ public class PlayerHealthData {
 
     public boolean hasFracture(BodyPart part) {
         FractureEffect effect = fractureEffects.get(part);
-        return effect != null && (effect.duration == INFINITE_DURATION || effect.duration > 0);
+        return effect != null;
     }
 
     public float getFractureIntensity(BodyPart part) {
@@ -386,12 +425,14 @@ public class PlayerHealthData {
 
     // ============ ОБНОВЛЕНИЕ ЭФФЕКТОВ ============
 
+    /**
+     * Тикать эффекты (вызывается каждый тик)
+     */
     public void tickEffects() {
-        // Обновляем кровотечения
+        // Тикаем кровотечения
         bleedingEffects.entrySet().removeIf(entry -> {
             BleedingEffect effect = entry.getValue();
 
-            // Бесконечное кровотечение не тикается
             if (effect.duration == INFINITE_DURATION) {
                 return false;
             }
@@ -399,11 +440,6 @@ public class PlayerHealthData {
             effect.duration--;
 
             if (effect.duration <= 0) {
-                BodyPart part = entry.getKey();
-                if (effect.type.causesPain()) {
-                    int painAfter = effect.type.getPainDurationAfter() * 20;
-                    addPain(painAfter, 0.4f);
-                }
                 return true;
             }
             return false;
@@ -416,15 +452,12 @@ public class PlayerHealthData {
                 painIntensity = 0f;
             }
         }
-
-        // ✅ Тикаем таймер торса
-        tickTorsoDeathTimer();
     }
 
     // ============ ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ ============
 
     private static class BleedingEffect {
-        int duration;           // В тиках, INFINITE_DURATION = бесконечное
+        int duration;
         BleedingType type;
         float damagePerSecond;
 
@@ -436,8 +469,8 @@ public class PlayerHealthData {
     }
 
     private static class FractureEffect {
-        int duration;      // INFINITE_DURATION
-        float intensity;   // 0.0 - 1.0
+        int duration;
+        float intensity;
 
         FractureEffect(int duration, float intensity) {
             this.duration = duration;
@@ -445,7 +478,7 @@ public class PlayerHealthData {
         }
     }
 
-    // ============ NBT ============
+    // ============ NBT (БЕЗ ИЗМЕНЕНИЙ) ============
 
     public CompoundTag writeNbt(CompoundTag nbt) {
         // HP частей тела
@@ -479,11 +512,6 @@ public class PlayerHealthData {
         // Боль
         nbt.putInt("painDuration", painDuration);
         nbt.putFloat("painIntensity", painIntensity);
-
-        // ✅ Таймер торса
-        nbt.putBoolean("torsoDestroyed", torsoDestroyed);
-        nbt.putInt("torsoDeathTimer", torsoDeathTimer);
-        nbt.putInt("torsoDeathDuration", torsoDeathDuration);
 
         return nbt;
     }
@@ -539,17 +567,6 @@ public class PlayerHealthData {
         }
         if (nbt.contains("painIntensity")) {
             painIntensity = nbt.getFloat("painIntensity");
-        }
-
-        // ✅ Таймер торса
-        if (nbt.contains("torsoDestroyed")) {
-            torsoDestroyed = nbt.getBoolean("torsoDestroyed");
-        }
-        if (nbt.contains("torsoDeathTimer")) {
-            torsoDeathTimer = nbt.getInt("torsoDeathTimer");
-        }
-        if (nbt.contains("torsoDeathDuration")) {
-            torsoDeathDuration = nbt.getInt("torsoDeathDuration");
         }
     }
 }

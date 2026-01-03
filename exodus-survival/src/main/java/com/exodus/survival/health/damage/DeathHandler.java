@@ -2,7 +2,6 @@ package com.exodus.survival.health.damage;
 
 import com.exodus.core.ExodusCoreAPI;
 import com.exodus.core.api.player.PlayerHealthData;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.player.Player;
 
@@ -46,16 +45,6 @@ public class DeathHandler {
         // 💀 Голова уничтожена
         if (deathCause == PlayerHealthData.DeathCause.HEAD_DESTROYED) {
             return "§c§l💀 " + playerName + " §4§lполучил смертельное ранение головы";
-        }
-
-        // 💔 Торс - отказ внутренних органов
-        if (deathCause == PlayerHealthData.DeathCause.TORSO_FAILURE) {
-            return "§c§l💔 " + playerName + " §4§lумер от отказа внутренних органов";
-        }
-
-        // ☠️ Все части тела уничтожены
-        if (deathCause == PlayerHealthData.DeathCause.ALL_BODY_DESTROYED) {
-            return "§c§l☠ " + playerName + " §4§lполностью изувечен";
         }
 
         // 🩸 Истёк кровью
