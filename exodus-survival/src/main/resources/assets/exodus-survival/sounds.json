@@ -1,17 +1,17 @@
 {
-  "ambient.hypothermia_ambient": {
+  "ambient.shiver": {
     "sounds": [
       {
-        "name": "exodus-survival:ambient/hypothermia_ambient",
+        "name": "exodus-survival:ambient/shiver",
         "stream": true
       }
     ],
-    "subtitle": "Дрожь от холода"
+    "subtitle": "Дрожь"
   },
-  "ambient.hyperthermia_breath": {
+  "ambient.breath": {
     "sounds": [
       {
-        "name": "exodus-survival:ambient/hyperthermia_breath",
+        "name": "exodus-survival:ambient/breath",
         "stream": true
       }
     ],

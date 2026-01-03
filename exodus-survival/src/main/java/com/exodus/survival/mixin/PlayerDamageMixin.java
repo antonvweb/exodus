@@ -14,6 +14,7 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
@@ -39,6 +40,10 @@ public abstract class PlayerDamageMixin {
     )
     private void onPlayerHurt(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         Player player = (Player) (Object) this;
+
+        if (exodus$isAbsoluteDeath(source)) {
+            return;
+        }
 
         if (player.invulnerableTime > 0) {
             cir.setReturnValue(false);
@@ -86,12 +91,18 @@ public abstract class PlayerDamageMixin {
         // Наносим урон на эту часть тела
         ExodusCoreAPI.damageBodyPart(player, hitPart, amount);
 
+        if (!ExodusCoreAPI.isAlive(player)) {
+            player.setHealth(0); // ← ЗДЕСЬ!
+            cir.setReturnValue(true);
+            cir.cancel();
+            return;
+        }
+
         // ✅ Если торс уничтожен - запускаем таймер смерти
         if (hitPart == BodyPart.TORSO && ExodusCoreAPI.getBodyPartHP(player, BodyPart.TORSO) <= 0) {
             PlayerHealthData data = ExodusCoreAPI.getHealthData(player);
             if (!data.isTorsoDestroyed()) {
                 data.startTorsoDeathTimer();
-                player.sendSystemMessage(Component.literal("§c§l⚠ КРИТИЧЕСКОЕ ПОВРЕЖДЕНИЕ ТОРСА! Требуется срочное лечение!"));
             }
         }
 
@@ -149,6 +160,11 @@ public abstract class PlayerDamageMixin {
         // Отменяем ванильный урон
         cir.setReturnValue(true);
         cir.cancel();
+    }
+
+    @Unique
+    private boolean exodus$isAbsoluteDeath(DamageSource source) {
+        return source.is(DamageTypes.GENERIC_KILL);
     }
 
     /**

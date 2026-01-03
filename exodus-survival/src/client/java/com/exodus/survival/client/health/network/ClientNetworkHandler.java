@@ -2,10 +2,7 @@ package com.exodus.survival.client.health.network;
 
 import com.exodus.survival.client.health.effects.*;
 import com.exodus.survival.client.health.effects.sounds.StatusSounds;
-import com.exodus.survival.health.network.DamagePacket;
-import com.exodus.survival.health.network.CameraShakePacket;
-import com.exodus.survival.health.network.FracturePacket;
-import com.exodus.survival.health.network.HeadSpinPacket;
+import com.exodus.survival.health.network.*;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 
@@ -52,10 +49,8 @@ public class ClientNetworkHandler {
             Minecraft.getInstance().execute(() -> {
                 if (activate) {
                     HeadSpinEffect.activate(intensity);
-                    StatusSounds.updateHyperthermiaBreath(true, 39.0f);
                 } else {
                     HeadSpinEffect.deactivate();
-                    StatusSounds.updateHyperthermiaBreath(false, 37.0f);
                 }
             });
         });
@@ -75,6 +70,19 @@ public class ClientNetworkHandler {
                 // - Сообщение в чат
                 if (intensity > 0.7f) {
                     DamageShake.addShake(3.0f); // Лёгкая тряска для сильных переломов
+                }
+            });
+        });
+
+        ClientPlayNetworking.registerGlobalReceiver(BreathPacket.TYPE, (packet, player, responseSender) -> {
+            boolean activate = packet.shouldActivate();
+
+            Minecraft.getInstance().execute(() -> {
+                if(activate){
+                    StatusSounds.updateBreath(true, 0.6f);
+                }
+                else{
+                    StatusSounds.updateBreath(false, 0.0f);
                 }
             });
         });

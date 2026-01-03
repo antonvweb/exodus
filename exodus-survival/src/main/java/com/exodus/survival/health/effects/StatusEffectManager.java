@@ -12,6 +12,7 @@ import com.exodus.core.player.vitals.PlayerVitalsManager;
 import com.exodus.survival.health.damage.DeathHandler;
 import com.exodus.survival.health.network.CameraShakePacket;
 import com.exodus.survival.health.network.HeadSpinPacket;
+import com.exodus.survival.health.network.BreathPacket;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -29,6 +30,7 @@ public class StatusEffectManager {
 
     private static final Map<UUID, Boolean> lastShakeState = new HashMap<>();
     private static final Map<UUID, Boolean> lastSpinState = new HashMap<>();
+    private static final Map<UUID, Boolean> lastLowHealthState  = new HashMap<>();
 
     /**
      * Регистрировать систему эффектов
@@ -44,6 +46,8 @@ public class StatusEffectManager {
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             lastShakeState.remove(handler.getPlayer().getUUID());
+            lastSpinState.remove(handler.getPlayer().getUUID());
+            lastLowHealthState.remove(handler.getPlayer().getUUID());
         });
     }
 
@@ -51,39 +55,58 @@ public class StatusEffectManager {
      * Обработка эффектов для одного игрока
      */
     private static void tickEffects(ServerPlayer player) {
-        // Обновляем таймеры эффектов
         ExodusCoreAPI.getHealthComponent(player).tick();
 
-        // Применяем урон от эффектов каждую секунду
+        // Применяем урон каждую секунду
         if (tickCounter % 20 == 0) {
             applyBleedingDamage(player);
-
-            // ✅ ПРОВЕРКА ТАЙМЕРА ТОРСА
             checkTorsoDeathChance(player);
-
-            // ✅ ПРОВЕРКА СМЕРТИ
             checkDeathFromEffects(player);
-
             applyTemperatureDamage(player);
         }
 
-        // Применяем дебафы каждый тик
+        PlayerHealthData data = ExodusCoreAPI.getHealthData(player);
+
+        // ✅ ПРОВЕРЯЕМ СМЕРТЬ СНАЧАЛА
+        if (!data.isAlive()) {
+            // Игрок мёртв - выключаем все звуки
+            Boolean lastState = lastLowHealthState.get(player.getUUID());
+
+            if (lastState == null || lastState) {
+                ServerPlayNetworking.send(player, new BreathPacket(false));
+                lastLowHealthState.put(player.getUUID(), false);
+            }
+
+            return; // ← ВЫХОДИМ, не обрабатываем дебафы
+        }
+
+        // Если жив - проверяем дыхание
+        boolean isLowHp = data.getFullHp(player) < 0.25f;
+        boolean torsoDestroyed = data.isTorsoDestroyed();
+
+        PlayerVitalsData vitals = PlayerVitalsManager.getComponent(player).getData();
+        boolean isHot = vitals.isSevereHyperthermia();
+
+        boolean shouldBreatheHeavy = isLowHp || torsoDestroyed || isHot;
+
+        Boolean lastState = lastLowHealthState.get(player.getUUID());
+
+        if(lastState == null || lastState != shouldBreatheHeavy){
+            ServerPlayNetworking.send(player, new BreathPacket(shouldBreatheHeavy));
+            lastLowHealthState.put(player.getUUID(), shouldBreatheHeavy);
+        }
+
+        // Остальные дебафы
         applyFractureDebuffs(player);
-
-        // ✅ Дебафы от уничтоженных конечностей
         applyDestroyedLimbsDebuffs(player);
-
-        // ✅ ДОБАВЬ ЭТО: Дебафы от температуры
-        applyTemperatureDebuffs(player);
+        applyTemperatureDebuffs(player, vitals);
     }
 
     /**
      * Дебафы от температуры (скорость, стамина, жажда)
      * Вызывается КАЖДЫЙ ТИК
      */
-    private static void applyTemperatureDebuffs(ServerPlayer player) {
-        PlayerVitalsData vitals = PlayerVitalsManager.getComponent(player).getData();
-
+    private static void applyTemperatureDebuffs(ServerPlayer player, PlayerVitalsData vitals) {
         // ✅ СНАЧАЛА очищаем старые модификаторы
         HealthAttributeHelper.clearTemperatureDebuffs(player);
 

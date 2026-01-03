@@ -33,7 +33,7 @@ public class DeathHandler {
             return;
         }
         // Убиваем игрока
-        player.hurt(player.damageSources().generic(), 1000.0f);
+        player.setHealth(0);
     }
 
     /**

@@ -11,11 +11,10 @@ import net.minecraft.sounds.SoundEvent;
 public class ExodusSounds {
 
     // ❄️ Звуки холода (гипотермия)
-    public static final SoundEvent HYPOTHERMIA_AMBIENT = registerSound("ambient.hypothermia_ambient");
-    public static final SoundEvent HYPOTHERMIA_SHIVER = registerSound("ambient.hypothermia_shiver");
+    public static final SoundEvent SHIVER = registerSound("ambient.shiver");
 
     // 🔥 Звуки жары (гипертермия)
-    public static final SoundEvent HYPERTHERMIA_BREATH = registerSound("ambient.hyperthermia_breath");
+    public static final SoundEvent BREATH = registerSound("ambient.breath");
 
     // 💀 Звуки травм
     public static final SoundEvent FRACTURE_BONES = registerSound("ambient.fracture_bones");

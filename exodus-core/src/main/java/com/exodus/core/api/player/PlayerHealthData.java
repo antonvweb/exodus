@@ -65,6 +65,15 @@ public class PlayerHealthData {
         return baseMax * multiplier;
     }
 
+    public float getFullHp(Player player){
+        float resultHp = 0f;
+        for (Map.Entry<BodyPart, Float> hp : bodyPartHP.entrySet()) {
+           resultHp += getBodyPartHPPercentage(hp.getKey(), player);
+        }
+
+        return resultHp / 6;
+    }
+
     public void setBodyPartHP(BodyPart part, float hp, Player player) {
         bodyPartHP.put(part, Math.max(0, Math.min(getMaxBodyPartHP(part, player), hp)));
     }

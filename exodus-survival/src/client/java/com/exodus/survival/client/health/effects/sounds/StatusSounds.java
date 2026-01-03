@@ -13,7 +13,7 @@ public class StatusSounds {
 
     // Текущие зацикленные звуки
     private static LoopingSoundInstance hypothermiaSound = null;
-    private static LoopingSoundInstance hyperthermiaSound = null;
+    private static LoopingSoundInstance breathSound = null;
 
     // Таймеры для разовых звуков
     private static long lastShiverSound = 0;
@@ -34,7 +34,7 @@ public class StatusSounds {
                 float severity = Mth.clamp((35.0f - temperature) / 2.0f, 0.3f, 1.0f);
 
                 hypothermiaSound = new LoopingSoundInstance(
-                        ExodusSounds.HYPOTHERMIA_AMBIENT,
+                        ExodusSounds.SHIVER,
                         severity * 0.4f, // Громкость (тихий фон)
                         1.0f
                 );
@@ -58,33 +58,27 @@ public class StatusSounds {
     /**
      * Обновить звук тяжёлого дыхания (зацикленный)
      */
-    public static void updateHyperthermiaBreath(boolean shouldPlay, float temperature) {
+    public static void updateBreath(boolean shouldPlay, float severity) {
         Minecraft mc = Minecraft.getInstance();
 
         if (shouldPlay) {
             // ✅ Если звук не играет - запустить
-            if (hyperthermiaSound == null || !mc.getSoundManager().isActive(hyperthermiaSound)) {
-
-                float severity = Mth.clamp((temperature - 38.0f) / 2.0f, 0.3f, 1.0f);
-
-                hyperthermiaSound = new LoopingSoundInstance(
-                        ExodusSounds.HYPERTHERMIA_BREATH,
-                        severity * 0.5f,
+            if (breathSound == null || !mc.getSoundManager().isActive(breathSound)) {
+                breathSound = new LoopingSoundInstance(
+                        ExodusSounds.BREATH,
+                        severity,
                         1.0f
                 );
 
-                mc.getSoundManager().play(hyperthermiaSound);
+                mc.getSoundManager().play(breathSound);
             } else {
-                // ✅ Обновляем громкость
-                float severity = Mth.clamp((temperature - 38.0f) / 2.0f, 0.3f, 1.0f);
-                hyperthermiaSound.setVolume(severity * 0.5f);
+                breathSound.setVolume(severity);
             }
 
         } else {
-            // ❌ Остановить
-            if (hyperthermiaSound != null) {
-                hyperthermiaSound.fadeOut();
-                hyperthermiaSound = null;
+            if (breathSound != null) {
+                breathSound.fadeOut();
+                breathSound = null;
             }
         }
     }
@@ -119,9 +113,9 @@ public class StatusSounds {
             hypothermiaSound = null;
         }
 
-        if (hyperthermiaSound != null) {
-            hyperthermiaSound.fadeOut();
-            hyperthermiaSound = null;
+        if (breathSound != null) {
+            breathSound.fadeOut();
+            breathSound = null;
         }
 
         lastShiverSound = 0;
