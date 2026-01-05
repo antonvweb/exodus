@@ -276,9 +276,30 @@ public abstract class PlayerDamageMixin {
         Entity directEntity = source.getDirectEntity();
 
         if (directEntity instanceof Projectile projectile) {
-            // Используем специальный метод для снарядов
-            Vec3 projectilePos = projectile.position();
-            return BodyPartHitboxes.detectProjectileHit(player, projectilePos); // ← ИЗМЕНЕНО!
+            // Ключевое исправление: используем позицию в момент коллизии, а не текущую
+            Vec3 projectilePos;
+
+            // Получаем позицию снаряда на момент попадания
+            if (projectile.tickCount == 0) {
+                // Снаряд только создан
+                projectilePos = projectile.position();
+            } else {
+                // Используем предыдущую позицию (где был снаряд перед ударом)
+                projectilePos = projectile.position().subtract(projectile.getDeltaMovement());
+            }
+
+            // Для отладки выводим информацию
+            System.out.println("[DEBUG] Arrow detection:");
+            System.out.println("  Current pos: " + projectile.position());
+            System.out.println("  Used pos: " + projectilePos);
+            System.out.println("  Player pos: " + player.position());
+            System.out.println("  Player yaw: " + player.getYRot());
+
+            BodyPart result = BodyPartHitboxes.detectProjectileHit(player, projectilePos);
+
+            System.out.println("  Detected body part: " + result);
+
+            return result;
         }
 
         // ========== MELEE: WEIGHTED ZONES ==========

@@ -134,6 +134,48 @@ public class BodyPartHitboxes {
     }
 
     /**
+     * Преобразовать мировую точку в локальные координаты игрока
+     *
+     * ВАЖНО: Используем только YAW (горизонтальный поворот),
+     *        игнорируем PITCH (вверх-вниз)
+     *
+     * ЛОКАЛЬНАЯ СИСТЕМА КООРДИНАТ ПОСЛЕ ИСПРАВЛЕНИЯ:
+     * - +X = влево от игрока
+     * - -X = вправо от игрока
+     * - +Y = вверх
+     * - +Z = вперёд (направление тела)
+     *
+     * Это стандарт для большинства Tarkov-like модов — соответствует ожиданиям игроков
+     */
+    private static Vec3 worldToLocal(Player player, Vec3 worldPoint) {
+        // 1. Вектор от игрока до точки (в мировых координатах)
+        Vec3 playerPos = player.position();
+        Vec3 relative = worldPoint.subtract(playerPos);
+
+        // 2. Получаем YAW игрока в радианах
+        float yaw = player.getYRot();
+        double yawRadians = Math.toRadians(yaw);
+
+        // 3. Вектор вперёд (куда смотрит игрок по горизонтали)
+        double forwardX = -Math.sin(yawRadians);
+        double forwardZ = Math.cos(yawRadians);
+        Vec3 forward = new Vec3(forwardX, 0, forwardZ);
+
+        // 4. Вектор вправо от игрока
+        double rightX = Math.cos(yawRadians);
+        double rightZ = Math.sin(yawRadians);
+        Vec3 right = new Vec3(rightX, 0, rightZ);
+
+        // 5. Проецируем
+        // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: инвертируем localX, чтобы +X был слева от игрока
+        double localX = -relative.dot(right);   // теперь положительный = левая сторона
+        double localY = relative.y;
+        double localZ = relative.dot(forward);
+
+        return new Vec3(localX, localY, localZ);
+    }
+
+    /**
      * Определить часть тела по мировым координатам
      * (используется для всех типов урона)
      *
@@ -142,29 +184,29 @@ public class BodyPartHitboxes {
      * @return Часть тела
      */
     public static BodyPart detectHitBodyPart(Player player, Vec3 worldHitPosition) {
-        Vec3 playerPos = player.position();
-        Vec3 relativeHit = worldHitPosition.subtract(playerPos);
+        // ⭐ Преобразуем в локальные координаты игрока
+        Vec3 localHit = worldToLocal(player, worldHitPosition);
 
-        // Проверяем хитбоксы в порядке приоритета
-        if (isInsideHitbox(relativeHit, BodyPart.HEAD)) {
+        // Проверяем хитбоксы (они заданы в локальных координатах)
+        if (isInsideHitbox(localHit, BodyPart.HEAD)) {
             return BodyPart.HEAD;
         }
 
-        if (isInsideHitbox(relativeHit, BodyPart.LEFT_ARM)) {
+        if (isInsideHitbox(localHit, BodyPart.LEFT_ARM)) {
             return BodyPart.LEFT_ARM;
         }
-        if (isInsideHitbox(relativeHit, BodyPart.RIGHT_ARM)) {
+        if (isInsideHitbox(localHit, BodyPart.RIGHT_ARM)) {
             return BodyPart.RIGHT_ARM;
         }
 
-        if (isInsideHitbox(relativeHit, BodyPart.LEFT_LEG)) {
+        if (isInsideHitbox(localHit, BodyPart.LEFT_LEG)) {
             return BodyPart.LEFT_LEG;
         }
-        if (isInsideHitbox(relativeHit, BodyPart.RIGHT_LEG)) {
+        if (isInsideHitbox(localHit, BodyPart.RIGHT_LEG)) {
             return BodyPart.RIGHT_LEG;
         }
 
-        if (isInsideHitbox(relativeHit, BodyPart.TORSO)) {
+        if (isInsideHitbox(localHit, BodyPart.TORSO)) {
             return BodyPart.TORSO;
         }
 
