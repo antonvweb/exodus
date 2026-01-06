@@ -3,7 +3,7 @@ package com.exodus.survival.health.effects;
 import com.exodus.core.player.attributes.AttributeManager;
 import com.exodus.core.api.attributes.AttributeModifier;
 import com.exodus.core.api.attributes.AttributeType;
-import com.exodus.core.api.player.BodyPart;
+import com.exodus.core.api.player.health.BodyPart;
 import net.minecraft.world.entity.player.Player;
 
 /**

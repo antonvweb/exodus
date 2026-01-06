@@ -2,9 +2,9 @@ package com.exodus.survival.mixin;
 
 import com.exodus.core.ExodusCoreAPI;
 import com.exodus.core.api.attributes.AttributeType;
-import com.exodus.core.api.player.BleedingType;
-import com.exodus.core.api.player.BodyPart;
-import com.exodus.core.api.player.PlayerHealthData;
+import com.exodus.core.api.player.health.BleedingType;
+import com.exodus.core.api.player.health.BodyPart;
+import com.exodus.core.api.player.health.PlayerHealthData;
 import com.exodus.core.player.attributes.AttributeManager;
 import com.exodus.survival.health.damage.DeathHandler;
 import com.exodus.survival.health.damage.BodyPartHitboxes;
@@ -36,7 +36,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * 4. Overflow damage встроен в PlayerHealthData
  */
 @Mixin(Player.class)
-public abstract class PlayerDamageMixin {
+public abstract class PlayerMixin {
 
     /**
      * Флаг предотвращения рекурсии при смерти

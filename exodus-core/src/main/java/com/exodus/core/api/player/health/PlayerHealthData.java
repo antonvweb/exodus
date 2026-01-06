@@ -1,4 +1,4 @@
-package com.exodus.core.api.player;
+package com.exodus.core.api.player.health;
 
 import com.exodus.core.api.attributes.AttributeType;
 import com.exodus.core.player.attributes.AttributeManager;

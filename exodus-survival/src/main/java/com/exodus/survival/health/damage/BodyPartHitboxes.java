@@ -1,6 +1,6 @@
 package com.exodus.survival.health.damage;
 
-import com.exodus.core.api.player.BodyPart;
+import com.exodus.core.api.player.health.BodyPart;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;

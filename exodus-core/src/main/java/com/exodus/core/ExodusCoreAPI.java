@@ -1,12 +1,19 @@
 package com.exodus.core;
 
 import com.exodus.core.api.player.*;
-import com.exodus.core.api.player.PlayerHealthData;
+import com.exodus.core.api.player.health.BleedingType;
+import com.exodus.core.api.player.health.BodyPart;
+import com.exodus.core.api.player.health.PlayerHealthData;
+import com.exodus.core.api.player.inventory.InventorySlot;
+import com.exodus.core.api.player.inventory.PlayerInventoryData;
 import com.exodus.core.player.health.PlayerHealthComponent;
 import com.exodus.core.player.health.PlayerHealthManager;
+import com.exodus.core.player.inventory.PlayerInventoryComponent;
+import com.exodus.core.player.inventory.PlayerInventoryManager;
 import com.exodus.core.player.stats.PlayerStatsManager;
 import com.exodus.core.player.vitals.PlayerVitalsManager;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 
 /**
  * Главный API класс для Exodus Core
@@ -389,5 +396,85 @@ public class ExodusCoreAPI {
      */
     public static void addMental(Player player, float amount) {
         PlayerVitalsManager.addMental(player, amount);
+    }
+
+    // ==================== КАСТОМНЫЙ ИНВЕНТАРЬ ====================
+
+    /**
+     * Получить компонент кастомного инвентаря игрока
+     */
+    public static PlayerInventoryComponent getInventoryComponent(Player player) {
+        return PlayerInventoryManager.getComponent(player);
+    }
+
+    /**
+     * Получить данные кастомного инвентаря игрока
+     */
+    public static PlayerInventoryData getInventoryData(Player player) {
+        return getInventoryComponent(player).getData();
+    }
+
+    /**
+     * Добавить предмет в кастомный инвентарь игрока
+     * @return true если предмет полностью добавлен, false если инвентарь полон
+     */
+    public static boolean addItemToInventory(Player player, ItemStack stack) {
+        return getInventoryData(player).addItem(stack);
+    }
+
+    /**
+     * Очистить весь кастомный инвентарь игрока
+     */
+    public static void clearInventory(Player player) {
+        getInventoryData(player).clear();
+    }
+
+    /**
+     * Получить размер кастомного инвентаря (всегда 16)
+     */
+    public static int getInventorySize(Player player) {
+        return PlayerInventoryData.INVENTORY_SIZE;
+    }
+
+    /**
+     * Получить слот по индексу (0-15)
+     */
+    public static InventorySlot getInventorySlot(Player player, int index) {
+        if (index < 0 || index >= PlayerInventoryData.INVENTORY_SIZE) {
+            return null;
+        }
+        return getInventoryData(player).slots.get(index);
+    }
+
+    /**
+     * Получить ItemStack из слота (может быть ItemStack.EMPTY)
+     */
+    public static ItemStack getItemInSlot(Player player, int index) {
+        InventorySlot slot = getInventorySlot(player, index);
+        return slot != null ? slot.getItemStack() : ItemStack.EMPTY;
+    }
+
+    /**
+     * Установить предмет в конкретный слот (перезапись)
+     */
+    public static void setItemInSlot(Player player, int index, ItemStack stack) {
+        InventorySlot slot = getInventorySlot(player, index);
+        if (slot != null) {
+            if (stack.isEmpty()) {
+                slot.clear();
+            } else {
+                ItemStack copy = stack.copy();
+                copy.setCount(Math.min(copy.getCount(), copy.getMaxStackSize()));
+                slot.setItemStack(copy);
+            }
+        }
+    }
+
+    /**
+     * Проверить, пустой ли слот
+     */
+    public static boolean isSlotEmpty(Player player, int index) {
+        InventorySlot slot = getInventorySlot(player, index);
+        return slot == null || slot.isEmpty();
     }
 }

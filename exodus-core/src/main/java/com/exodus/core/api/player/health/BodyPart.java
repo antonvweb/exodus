@@ -1,4 +1,4 @@
-package com.exodus.core.api.player;
+package com.exodus.core.api.player.health;
 
 /**
  * Части тела игрока

@@ -1,8 +1,8 @@
-package com.exodus.survival.client.health;
+package com.exodus.survival.client.hud;
 
 import com.exodus.core.ExodusCoreAPI;
-import com.exodus.core.api.player.BodyPart;
-import com.exodus.core.api.player.PlayerHealthData;
+import com.exodus.core.api.player.health.BodyPart;
+import com.exodus.core.api.player.health.PlayerHealthData;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.Minecraft;
@@ -16,8 +16,7 @@ import net.minecraft.world.entity.player.Player;
  */
 public class BodyHealthHud {
 
-    // Позиция HUD (слева сверху)
-    private static final int HUD_X = 25; // ✅ Сдвинули вправо (было 10)
+    private static final int HUD_X = 25;
     private static final int HUD_Y = 10;
 
     // Размеры частей тела (ОРИГИНАЛЬНЫЕ размеры спрайтов)
@@ -30,11 +29,11 @@ public class BodyHealthHud {
     private static final int LIMB_WIDTH = 16;
     private static final int LIMB_HEIGHT = 48;
 
-    // Размеры иконок эффектов
-    private static final int EFFECT_SIZE = 10; // ✅ Уменьшили (было 12)
+    private static final int EFFECT_SIZE = 10;
 
-    // Текстуры частей тела
     private static final String TEXTURE_PATH = "exodus-survival:textures/gui/body/";
+
+    private static boolean isLookAt = false;
 
     /**
      * Регистрировать HUD
@@ -57,17 +56,32 @@ public class BodyHealthHud {
 
         PlayerHealthData data = ExodusCoreAPI.getHealthData(player);
 
-        // Рисуем человечка
         renderBody(graphics, data, mc);
-
-        // Рисуем эффекты на частях тела
         renderBodyPartEffects(graphics, data, mc);
-
-        // Рисуем боль (глобально)
         renderPain(graphics, data, mc);
-
-        // ✅ ДОБАВЬ ЭТО: Рисуем температуру
         renderTemperature(graphics, mc);
+
+        if(isLookAt){
+            renderPickItem(graphics, mc);
+        }
+    }
+
+    private static void renderPickItem(GuiGraphics graphics, Minecraft mc) {
+        // Получаем размеры экрана в игровых координатах
+        int screenWidth = mc.getWindow().getGuiScaledWidth();
+        int screenHeight = mc.getWindow().getGuiScaledHeight();
+        int offset = 7;
+
+        // Центр экрана (где находится прицел)
+        int centerX = screenWidth / 2;
+        int centerY = screenHeight / 2;
+
+        // Смещаем немного от центра
+        int x = centerX + offset;
+        int y = centerY + offset;
+
+        // Отрисовываем "E"
+        graphics.drawString(mc.font, "E", x, y, 0xFFFFFFFF, true);
     }
 
     /**
@@ -302,5 +316,13 @@ public class BodyHealthHud {
         int intensity = (int)(data.getPainIntensity() * 100);
         String text = "Боль: " + intensity + "%";
         graphics.drawString(mc.font, text, painX + EFFECT_SIZE + 5, painY + 2, 0xFFFFFFFF, true);
+    }
+
+    public boolean isLookAt() {
+        return isLookAt;
+    }
+
+    public static void setIsLookAt(boolean heIsLookAt) {
+        isLookAt = heIsLookAt;
     }
 }

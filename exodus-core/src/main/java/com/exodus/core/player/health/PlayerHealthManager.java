@@ -1,6 +1,6 @@
 package com.exodus.core.player.health;
 
-import com.exodus.core.api.player.BodyPart;
+import com.exodus.core.api.player.health.BodyPart;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.nbt.CompoundTag;

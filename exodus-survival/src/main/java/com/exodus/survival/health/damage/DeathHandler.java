@@ -1,7 +1,7 @@
 package com.exodus.survival.health.damage;
 
 import com.exodus.core.ExodusCoreAPI;
-import com.exodus.core.api.player.PlayerHealthData;
+import com.exodus.core.api.player.health.PlayerHealthData;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.player.Player;
 

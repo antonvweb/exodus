@@ -2,6 +2,7 @@ package com.exodus.survival;
 
 import com.exodus.survival.commands.HealthCommand;
 import com.exodus.survival.health.effects.StatusEffectManager;
+import com.exodus.survival.inventory.network.ServerNetworkHandler;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,5 +16,6 @@ public class ExodusSurvival implements ModInitializer {
         ExodusSounds.register();      // ← ДОБАВЬ ЭТУ СТРОЧКУ
         StatusEffectManager.register();
         HealthCommand.register();
+        ServerNetworkHandler.register();
     }
 }

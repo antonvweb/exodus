@@ -4,7 +4,8 @@
   "package": "com.exodus.survival.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
-    "PlayerDamageMixin"
+    "PlayerMixin",
+    "ItemEntityMixin"
   ],
   "injectors": {
     "defaultRequire": 1

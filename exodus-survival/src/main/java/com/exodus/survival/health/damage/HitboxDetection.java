@@ -1,13 +1,10 @@
 package com.exodus.survival.health.damage;
 
-import com.exodus.core.api.player.BodyPart;
+import com.exodus.core.api.player.health.BodyPart;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.phys.Vec3;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Определение части тела куда попал урон

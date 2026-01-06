@@ -1,6 +1,7 @@
 package com.exodus.core;
 
 import com.exodus.core.player.health.PlayerHealthManager;
+import com.exodus.core.player.inventory.PlayerInventoryManager;
 import com.exodus.core.player.stats.PlayerStatsManager;
 import com.exodus.core.player.vitals.PlayerVitalsManager;
 import net.fabricmc.api.ModInitializer;
@@ -19,6 +20,7 @@ public class ExodusCore implements ModInitializer {
         PlayerHealthManager.registerEvents();
         PlayerStatsManager.registerEvents();
         PlayerVitalsManager.registerEvents();
+        PlayerInventoryManager.registerEvents();
 
         LOGGER.info("Exodus Core - Initialized successfully");
     }

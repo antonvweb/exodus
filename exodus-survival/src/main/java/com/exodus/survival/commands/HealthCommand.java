@@ -1,9 +1,9 @@
 package com.exodus.survival.commands;
 
 import com.exodus.core.ExodusCoreAPI;
-import com.exodus.core.api.player.BodyPart;
-import com.exodus.core.api.player.BleedingType;
-import com.exodus.core.api.player.PlayerHealthData;
+import com.exodus.core.api.player.health.BodyPart;
+import com.exodus.core.api.player.health.BleedingType;
+import com.exodus.core.api.player.health.PlayerHealthData;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
